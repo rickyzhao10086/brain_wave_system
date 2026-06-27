@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
 import '../widgets/screen_scaffold.dart';
@@ -34,15 +35,24 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(
+        const Expanded(
           child: Text(
             'Profile',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
         ),
-        StatusPill('Consent Active', color: Color(0xff22c55e)),
+        const StatusPill('Consent Active', color: Color(0xff22c55e)),
+        IconButton(
+          onPressed: () => AuthService.instance.signOut(),
+          tooltip: 'Sign out',
+          icon: Icon(
+            Icons.logout_rounded,
+            size: 20,
+            color: Colors.white.withValues(alpha: .6),
+          ),
+        ),
       ],
     );
   }
@@ -68,9 +78,11 @@ class _PatientCard extends StatelessWidget {
             child: const Icon(Icons.person_rounded, size: 52),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Maya Chen',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+          Text(
+            AuthService.instance.currentUser?.displayLabel ?? 'Patient',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 4),
           Text(

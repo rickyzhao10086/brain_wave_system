@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../painters/brain_map_painter.dart';
 import '../painters/signal_painter.dart';
 import '../painters/trend_painter.dart';
+import '../services/auth_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
 import '../widgets/screen_scaffold.dart';
 import '../widgets/section_title.dart';
-import '../widgets/status_pill.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -20,7 +20,7 @@ class HomeScreen extends StatelessWidget {
         SizedBox(height: 18),
         _PatientStatusCard(),
         SizedBox(height: 12),
-        _StatsRow(),
+        // _StatsRow(),
         SizedBox(height: 18),
         SectionTitle(title: 'Recent EEG Readings', action: 'Live'),
         SizedBox(height: 10),
@@ -57,9 +57,14 @@ class _HomeHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              const Text(
-                'NeuroMotion',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+              Text(
+                _greetingName(AuthService.instance.currentUser),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
@@ -70,6 +75,22 @@ class _HomeHeader extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// Friendly name for the greeting: the display name if we have one, otherwise
+  /// the email handle (capitalised), falling back to a neutral greeting.
+  static String _greetingName(AuthUser? user) {
+    final name = user?.displayName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+
+    final email = user?.email ?? '';
+    if (email.contains('@')) {
+      final handle = email.split('@').first;
+      if (handle.isNotEmpty) {
+        return handle[0].toUpperCase() + handle.substring(1);
+      }
+    }
+    return 'there';
   }
 }
 
@@ -133,11 +154,7 @@ class _StatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const stats = [
-      ('18', 'Sessions'),
-      ('74', 'Calm %'),
-      ('6m', 'Latest'),
-    ];
+    const stats = [('18', 'Sessions'), ('74', 'Calm %'), ('6m', 'Latest')];
 
     return Row(
       children: [
@@ -308,10 +325,7 @@ class _BrainMapCard extends StatelessWidget {
         width: double.infinity,
         child: Stack(
           children: [
-            CustomPaint(
-              size: Size.infinite,
-              painter: const BrainMapPainter(),
-            ),
+            CustomPaint(size: Size.infinite, painter: const BrainMapPainter()),
             Align(
               alignment: Alignment.bottomCenter,
               child: SizedBox(

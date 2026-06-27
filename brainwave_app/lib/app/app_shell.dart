@@ -4,7 +4,6 @@ import '../screens/analysis.dart';
 import '../screens/home.dart';
 import '../screens/model.dart';
 import '../screens/profile.dart';
-import '../screens/session.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -18,7 +17,6 @@ class _AppShellState extends State<AppShell> {
 
   static const _screens = [
     HomeScreen(),
-    SessionScreen(),
     AnalysisScreen(),
     ModelScreen(),
     ProfileScreen(),
@@ -40,10 +38,6 @@ class _AppShellState extends State<AppShell> {
           NavigationDestination(
             icon: Icon(Icons.home_rounded, size: 20),
             label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.flash_on_rounded, size: 20),
-            label: 'Session',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_rounded, size: 20),

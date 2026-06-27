@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'app_shell.dart';
+import 'auth_gate.dart';
 
 class NeuroMotionApp extends StatelessWidget {
   const NeuroMotionApp({super.key});
@@ -20,7 +20,7 @@ class NeuroMotionApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xff080914),
         fontFamily: 'Arial',
       ),
-      home: const AppShell(),
+      home: const AuthGate(),
     );
   }
 }
