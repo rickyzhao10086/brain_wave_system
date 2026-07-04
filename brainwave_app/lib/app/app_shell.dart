@@ -36,12 +36,12 @@ class _AppShellState extends State<AppShell> {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_rounded, size: 20),
-            label: 'Home',
+            icon: Icon(Icons.sensors_rounded, size: 20),
+            label: 'Device',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_rounded, size: 20),
-            label: 'Analysis',
+            label: 'Signals',
           ),
           NavigationDestination(
             icon: Icon(Icons.memory_rounded, size: 20),
@@ -49,7 +49,7 @@ class _AppShellState extends State<AppShell> {
           ),
           NavigationDestination(
             icon: Icon(Icons.person_rounded, size: 20),
-            label: 'Profile',
+            label: 'Setup',
           ),
         ],
       ),

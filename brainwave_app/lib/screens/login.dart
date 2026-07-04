@@ -242,7 +242,7 @@ class _Brand extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const Text(
-          'NeuroMotion',
+          'CerebroSync',
           style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 4),

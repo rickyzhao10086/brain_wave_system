@@ -8,6 +8,7 @@ import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
 import '../widgets/screen_scaffold.dart';
 import '../widgets/section_title.dart';
+import '../widgets/status_pill.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -18,19 +19,21 @@ class HomeScreen extends StatelessWidget {
       children: [
         _HomeHeader(),
         SizedBox(height: 18),
-        _PatientStatusCard(),
-        SizedBox(height: 12),
-        // _StatsRow(),
+        _MuseSessionCard(),
         SizedBox(height: 18),
-        SectionTitle(title: 'Recent EEG Readings', action: 'Live'),
+        SectionTitle(title: 'Electrode Contact', action: 'Muse 2'),
         SizedBox(height: 10),
-        _ReadingsCard(),
+        _ContactQualityCard(),
         SizedBox(height: 18),
-        SectionTitle(title: 'Signal Trace', action: 'MUSE 2'),
+        SectionTitle(title: 'Live Sensor Snapshot', action: 'Mock'),
+        SizedBox(height: 10),
+        _MuseSensorGrid(),
+        SizedBox(height: 18),
+        SectionTitle(title: 'EEG Trace', action: '4 ch'),
         SizedBox(height: 10),
         _SignalCard(),
         SizedBox(height: 18),
-        SectionTitle(title: 'Brain Activity Map', action: 'Details'),
+        SectionTitle(title: 'Headband Map', action: 'Contact'),
         SizedBox(height: 10),
         _BrainMapCard(),
       ],
@@ -50,7 +53,7 @@ class _HomeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Good Morning',
+                'Muse 2 Session',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: .58),
                   fontSize: 12,
@@ -70,15 +73,13 @@ class _HomeHeader extends StatelessWidget {
           ),
         ),
         const IconBadge(
-          icon: Icons.psychology_alt_rounded,
+          icon: Icons.sensors_rounded,
           colors: [Color(0xff17d6c0), Color(0xff8b5cf6)],
         ),
       ],
     );
   }
 
-  /// Friendly name for the greeting: the display name if we have one, otherwise
-  /// the email handle (capitalised), falling back to a neutral greeting.
   static String _greetingName(AuthUser? user) {
     final name = user?.displayName?.trim();
     if (name != null && name.isNotEmpty) return name;
@@ -94,52 +95,51 @@ class _HomeHeader extends StatelessWidget {
   }
 }
 
-class _PatientStatusCard extends StatelessWidget {
-  const _PatientStatusCard();
+class _MuseSessionCard extends StatelessWidget {
+  const _MuseSessionCard();
 
   @override
   Widget build(BuildContext context) {
     return NeuroPanel(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const IconBadge(
-            icon: Icons.sentiment_satisfied_alt_rounded,
-            colors: [Color(0xff22c55e), Color(0xff14b8a6)],
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Patient Status',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'Calm state detected from latest EEG window',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: .58),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          const Row(
             children: [
-              Text(
-                'Green',
-                style: TextStyle(
-                  color: Color(0xff22c55e),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
+              IconBadge(
+                icon: Icons.bluetooth_connected_rounded,
+                colors: [Color(0xff22c55e), Color(0xff14b8a6)],
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Muse 2 Ready',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                 ),
               ),
-              Text(
-                'Traffic Light',
-                style: TextStyle(color: Color(0xff8792a8), fontSize: 11),
+              StatusPill('Frontend Mock', color: Color(0xfff59e0b)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Signal preview is tailored to Muse 2 EEG, PPG, accelerometer, and gyroscope streams. Hardware and Firebase are pending, so values are representative placeholders.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .62),
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Row(
+            children: [
+              Expanded(
+                child: _SessionMetric(label: 'Battery', value: '82%'),
+              ),
+              Expanded(
+                child: _SessionMetric(label: 'Stream', value: '256Hz'),
+              ),
+              Expanded(
+                child: _SessionMetric(label: 'Artifact', value: 'Low'),
               ),
             ],
           ),
@@ -149,74 +149,53 @@ class _PatientStatusCard extends StatelessWidget {
   }
 }
 
-class _StatsRow extends StatelessWidget {
-  const _StatsRow();
+class _SessionMetric extends StatelessWidget {
+  const _SessionMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    const stats = [('18', 'Sessions'), ('74', 'Calm %'), ('6m', 'Latest')];
-
-    return Row(
+    return Column(
       children: [
-        for (final stat in stats)
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: NeuroPanel(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Column(
-                  children: [
-                    Text(
-                      stat.$1,
-                      style: const TextStyle(
-                        color: Color(0xff8b5cf6),
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      stat.$2,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: .56),
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Color(0xff22d3ee),
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
           ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .55),
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
 }
 
-class _ReadingsCard extends StatelessWidget {
-  const _ReadingsCard();
+class _ContactQualityCard extends StatelessWidget {
+  const _ContactQualityCard();
 
   @override
   Widget build(BuildContext context) {
     return const NeuroPanel(
       child: Column(
         children: [
-          _ReadingRow(
-            label: 'Calm',
-            value: .74,
-            color: Color(0xff22c55e),
-            time: 'Now',
-          ),
-          _ReadingRow(
-            label: 'Elevated',
-            value: .19,
-            color: Color(0xfff59e0b),
-            time: '12:43 PM',
-          ),
-          _ReadingRow(
-            label: 'Distress',
-            value: .07,
-            color: Color(0xffff4d6d),
-            time: '12:38 PM',
+          _ContactRow(label: 'TP9', description: 'Left ear', value: .92),
+          _ContactRow(label: 'AF7', description: 'Left forehead', value: .86),
+          _ContactRow(label: 'AF8', description: 'Right forehead', value: .89),
+          _ContactRow(
+            label: 'TP10',
+            description: 'Right ear',
+            value: .95,
+            last: true,
           ),
         ],
       ),
@@ -224,59 +203,53 @@ class _ReadingsCard extends StatelessWidget {
   }
 }
 
-class _ReadingRow extends StatelessWidget {
-  const _ReadingRow({
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({
     required this.label,
+    required this.description,
     required this.value,
-    required this.color,
-    required this.time,
+    this.last = false,
   });
 
   final String label;
+  final String description;
   final double value;
-  final Color color;
-  final String time;
+  final bool last;
 
   @override
   Widget build(BuildContext context) {
+    final color = value >= .9
+        ? const Color(0xff22c55e)
+        : value >= .75
+        ? const Color(0xfff59e0b)
+        : const Color(0xffff4d6d);
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: last ? 0 : 12),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: color,
-            child: const Icon(Icons.circle, size: 9, color: Colors.white),
+          SizedBox(
+            width: 52,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900),
+            ),
           ),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${(value * 100).round()}%',
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .5),
+                    fontSize: 10,
+                  ),
                 ),
                 const SizedBox(height: 5),
                 LinearProgressIndicator(
                   value: value,
-                  minHeight: 5,
+                  minHeight: 6,
                   color: color,
                   backgroundColor: Colors.white.withValues(alpha: .08),
                   borderRadius: BorderRadius.circular(6),
@@ -285,11 +258,127 @@ class _ReadingRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
+          SizedBox(
+            width: 38,
+            child: Text(
+              '${(value * 100).round()}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MuseSensorGrid extends StatelessWidget {
+  const _MuseSensorGrid();
+
+  @override
+  Widget build(BuildContext context) {
+    const items = [
+      _MuseSensorData(
+        icon: Icons.graphic_eq_rounded,
+        label: 'EEG',
+        value: 'Alpha up',
+        detail: 'Bands stable',
+        color: Color(0xff22c55e),
+      ),
+      _MuseSensorData(
+        icon: Icons.monitor_heart_rounded,
+        label: 'PPG',
+        value: '72 bpm',
+        detail: 'Pulse clean',
+        color: Color(0xffff4d6d),
+      ),
+      _MuseSensorData(
+        icon: Icons.air_rounded,
+        label: 'Breath',
+        value: '15 rpm',
+        detail: 'Even pace',
+        color: Color(0xff22d3ee),
+      ),
+      _MuseSensorData(
+        icon: Icons.screen_rotation_alt_rounded,
+        label: 'IMU',
+        value: 'Still',
+        detail: 'Motion low',
+        color: Color(0xff8b5cf6),
+      ),
+    ];
+
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      childAspectRatio: 1.45,
+      children: [for (final item in items) _MuseSensorTile(data: item)],
+    );
+  }
+}
+
+class _MuseSensorData {
+  const _MuseSensorData({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+  final Color color;
+}
+
+class _MuseSensorTile extends StatelessWidget {
+  const _MuseSensorTile({required this.data});
+
+  final _MuseSensorData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return NeuroPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(data.icon, color: data.color, size: 20),
+              const Spacer(),
+              Text(
+                data.label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .5),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
           Text(
-            time,
+            data.value,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: .44),
-              fontSize: 10,
+              color: data.color,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            data.detail,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .56),
+              fontSize: 11,
             ),
           ),
         ],

@@ -18,11 +18,11 @@ class ProfileScreen extends StatelessWidget {
         SizedBox(height: 18),
         _PatientCard(),
         SizedBox(height: 18),
-        SectionTitle(title: 'Body Measurements', action: 'Updated'),
+        SectionTitle(title: 'Muse 2 Setup', action: 'Mock'),
         SizedBox(height: 10),
         _MeasurementsGrid(),
         SizedBox(height: 18),
-        SectionTitle(title: 'Care Notes', action: 'Patient'),
+        SectionTitle(title: 'Session Notes', action: 'Pending'),
         SizedBox(height: 10),
         _DescriptionCard(),
       ],
@@ -86,15 +86,24 @@ class _PatientCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Patient ID NM-2048',
-            style: TextStyle(color: Colors.white.withValues(alpha: .55), fontSize: 12),
+            'Muse profile CS-2048',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .55),
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 14),
           const Row(
             children: [
-              Expanded(child: _MiniMetric(label: 'Age', value: '34')),
-              Expanded(child: _MiniMetric(label: 'Height', value: '168 cm')),
-              Expanded(child: _MiniMetric(label: 'Weight', value: '61 kg')),
+              Expanded(
+                child: _MiniMetric(label: 'Device', value: 'Muse 2'),
+              ),
+              Expanded(
+                child: _MiniMetric(label: 'Mode', value: 'Care'),
+              ),
+              Expanded(
+                child: _MiniMetric(label: 'Window', value: '30s'),
+              ),
             ],
           ),
         ],
@@ -109,10 +118,15 @@ class _MeasurementsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      (Icons.monitor_heart_rounded, 'Resting HR', '72 bpm', Color(0xffff4d6d)),
-      (Icons.air_rounded, 'Respiration', '15 rpm', Color(0xff22d3ee)),
-      (Icons.bedtime_rounded, 'Sleep Avg', '7h 12m', Color(0xff8b5cf6)),
-      (Icons.accessibility_new_rounded, 'BMI', '21.6', Color(0xff22c55e)),
+      (Icons.graphic_eq_rounded, 'EEG channels', '4 ch', Color(0xff22c55e)),
+      (Icons.monitor_heart_rounded, 'PPG pulse', 'Ready', Color(0xffff4d6d)),
+      (Icons.air_rounded, 'Breath pace', 'Ready', Color(0xff22d3ee)),
+      (
+        Icons.screen_rotation_alt_rounded,
+        'IMU motion',
+        'Ready',
+        Color(0xff8b5cf6),
+      ),
     ];
 
     return GridView.count(
@@ -171,7 +185,7 @@ class _DescriptionCard extends StatelessWidget {
               SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Therapist Summary',
+                  'Integration Note',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
@@ -179,7 +193,7 @@ class _DescriptionCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Maya is monitored during guided relaxation sessions. Caregivers should respond when the mobile indicator shifts to yellow or red and review the desktop EEG features after each session.',
+            'This screen is prepared for Muse 2 session monitoring, but it is still frontend-only. Firebase auth, stored patient records, and live hardware streams should be added after the device integration is ready.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,
@@ -213,7 +227,10 @@ class _MiniMetric extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withValues(alpha: .55), fontSize: 10),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: .55),
+            fontSize: 10,
+          ),
         ),
       ],
     );

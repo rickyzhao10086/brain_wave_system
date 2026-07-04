@@ -9,7 +9,7 @@ NeuroMotion 使用 MUSE 2（一款低成本的无线脑电（EEG）头带）来�
 - Home: stats summary
     - patient status
     - recent EEG readings
-- Analysis: Show how the health reading of the person wearing the device
+- Analysis: Show the health reading of the person wearing the device
 - Model: 
     - information about the current models used in the desktop app + the LLM APIs that you are using
 - Profile: info about the patient
@@ -22,3 +22,4 @@ NeuroMotion 使用 MUSE 2（一款低成本的无线脑电（EEG）头带）来�
 
 
 Doctors and Nurses ONLY use the desktop app
+- 

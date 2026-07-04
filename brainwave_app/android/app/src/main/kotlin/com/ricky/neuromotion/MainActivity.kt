@@ -1,4 +1,4 @@
-package com.example.brainwave_app
+package com.ricky.neuromotion
 
 import io.flutter.embedding.android.FlutterActivity
 

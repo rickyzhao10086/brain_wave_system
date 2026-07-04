@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'auth_gate.dart';
 
-class NeuroMotionApp extends StatelessWidget {
-  const NeuroMotionApp({super.key});
+class CerebroSyncApp extends StatelessWidget {
+  const CerebroSyncApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NeuroMotion',
+      title: 'CerebroSync',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

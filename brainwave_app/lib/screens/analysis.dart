@@ -8,15 +8,13 @@ import '../widgets/screen_scaffold.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_pill.dart';
 
-/// Analysis surfaces "how the health reading" of the wearer is derived: the
-/// current predicted state with confidence, the per-band EEG power that drives
-/// it, how the reading has trended, and the model's interpretation. The
-/// per-band breakdown is intentionally unique to this screen — Home shows the
-/// glanceable traffic light, this screen shows the evidence behind it.
+/// Analysis surfaces the Muse 2 evidence behind the session state: EEG band
+/// power, contact quality, motion artifacts, PPG, breathing pace, and the
+/// model's non-clinical interpretation.
 class AnalysisScreen extends StatelessWidget {
   const AnalysisScreen({super.key});
 
-  // Current reading. Calm → green traffic light, high confidence.
+  // Current reading. Calm -> green traffic light, high confidence.
   static const _state = 'Calm';
   static const _stateColor = Color(0xff22c55e);
   static const _confidence = 0.91;
@@ -33,7 +31,11 @@ class AnalysisScreen extends StatelessWidget {
           confidence: _confidence,
         ),
         SizedBox(height: 12),
-        _SignalQualityRow(),
+        _MuseQualityRow(),
+        SizedBox(height: 18),
+        SectionTitle(title: 'Muse 2 Body Signals', action: 'PPG + IMU'),
+        SizedBox(height: 10),
+        _MuseBodySignalsCard(),
         SizedBox(height: 18),
         SectionTitle(title: 'EEG Band Power', action: 'Relative'),
         SizedBox(height: 10),
@@ -43,7 +45,7 @@ class AnalysisScreen extends StatelessWidget {
         SizedBox(height: 10),
         _TrendCard(color: _stateColor),
         SizedBox(height: 18),
-        SectionTitle(title: 'AI Interpretation', action: 'OpenAI'),
+        SectionTitle(title: 'Session Interpretation', action: 'Mock'),
         SizedBox(height: 10),
         _InterpretationCard(),
       ],
@@ -71,7 +73,7 @@ class _AnalysisHeader extends StatelessWidget {
 }
 
 /// The headline of the screen: a confidence ring around the current state,
-/// followed by the traffic-light scale with the active light highlighted.
+/// followed by the readiness scale with the active light highlighted.
 class _ReadingHero extends StatelessWidget {
   const _ReadingHero({
     required this.state,
@@ -139,16 +141,17 @@ class _ReadingHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          _TrafficScale(activeColor: color),
+          _ReadinessScale(activeColor: color),
         ],
       ),
     );
   }
 }
 
-/// The green / yellow / red scale; the active light glows, the rest dim.
-class _TrafficScale extends StatelessWidget {
-  const _TrafficScale({required this.activeColor});
+/// The green / yellow / red scale; red means the sample needs review, not a
+/// clinical diagnosis.
+class _ReadinessScale extends StatelessWidget {
+  const _ReadinessScale({required this.activeColor});
 
   final Color activeColor;
 
@@ -157,7 +160,7 @@ class _TrafficScale extends StatelessWidget {
     const lights = [
       ('Calm', Color(0xff22c55e)),
       ('Elevated', Color(0xfff59e0b)),
-      ('Distress', Color(0xffff4d6d)),
+      ('Review', Color(0xffff4d6d)),
     ];
 
     return Row(
@@ -196,7 +199,12 @@ class _TrafficLight extends StatelessWidget {
             color: active ? color : color.withValues(alpha: .22),
             shape: BoxShape.circle,
             boxShadow: active
-                ? [BoxShadow(color: color.withValues(alpha: .55), blurRadius: 12)]
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: .55),
+                      blurRadius: 12,
+                    ),
+                  ]
                 : null,
           ),
         ),
@@ -214,16 +222,16 @@ class _TrafficLight extends StatelessWidget {
   }
 }
 
-/// Quality of the underlying MUSE 2 capture — how trustworthy this reading is.
-class _SignalQualityRow extends StatelessWidget {
-  const _SignalQualityRow();
+/// Quality of the underlying Muse 2 capture - how trustworthy this reading is.
+class _MuseQualityRow extends StatelessWidget {
+  const _MuseQualityRow();
 
   @override
   Widget build(BuildContext context) {
     const stats = [
-      ('98%', 'Signal'),
+      ('90%', 'Contact'),
       ('256Hz', 'Sample'),
-      ('4 ch', 'Electrodes'),
+      ('Low', 'Artifact'),
     ];
 
     return Row(
@@ -264,7 +272,102 @@ class _SignalQualityRow extends StatelessWidget {
   }
 }
 
-/// The five EEG frequency bands the desktop app computes from the stream —
+class _MuseBodySignalsCard extends StatelessWidget {
+  const _MuseBodySignalsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const NeuroPanel(
+      child: Column(
+        children: [
+          _BodySignalRow(
+            icon: Icons.monitor_heart_rounded,
+            label: 'PPG pulse',
+            value: '72 bpm',
+            detail: 'Clean waveform',
+            color: Color(0xffff4d6d),
+          ),
+          SizedBox(height: 12),
+          _BodySignalRow(
+            icon: Icons.air_rounded,
+            label: 'Breathing pace',
+            value: '15 rpm',
+            detail: 'Even rhythm',
+            color: Color(0xff22d3ee),
+          ),
+          SizedBox(height: 12),
+          _BodySignalRow(
+            icon: Icons.screen_rotation_alt_rounded,
+            label: 'Head motion',
+            value: '0.04 g',
+            detail: 'Low acceleration',
+            color: Color(0xff8b5cf6),
+          ),
+          SizedBox(height: 12),
+          _BodySignalRow(
+            icon: Icons.threesixty_rounded,
+            label: 'Gyroscope',
+            value: 'Still',
+            detail: 'No rotation artifact',
+            color: Color(0xfff59e0b),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BodySignalRow extends StatelessWidget {
+  const _BodySignalRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.detail,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final String detail;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(
+                detail,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .5),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The five EEG frequency bands the desktop app computes from the stream -
 /// the evidence the model turns into a state. Alpha dominance here is what
 /// reads as "calm".
 class _BandPowerCard extends StatelessWidget {
@@ -448,7 +551,7 @@ class _TrendCard extends StatelessWidget {
   }
 }
 
-/// The model's plain-language reading — what the bands mean for the wearer.
+/// The model's plain-language reading - what the bands mean for the wearer.
 class _InterpretationCard extends StatelessWidget {
   const _InterpretationCard();
 
@@ -476,10 +579,11 @@ class _InterpretationCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Alpha power is dominant while beta and gamma stay low, which the '
-            'model reads as a relaxed, settled state. No spikes in the higher '
-            'bands that would point to elevation or distress, so the traffic '
-            'light is held at green with high confidence.',
+            'Alpha power is dominant while beta and gamma stay low. Contact '
+            'quality is usable on all four Muse 2 electrodes, and motion '
+            'artifacts are low, so this mock session can hold a green calm '
+            'state. If contact drops or motion rises, the app should show '
+            'needs-review instead of making a stronger health claim.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,

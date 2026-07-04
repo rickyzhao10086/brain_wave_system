@@ -23,7 +23,7 @@ class AuthUser {
   }
 }
 
-/// Authentication for NeuroMotion.
+/// Authentication for CerebroSync.
 ///
 /// The intended backend is **Firebase Auth**, but it can't be provisioned yet
 /// (the developer is in a region where Firebase setup is blocked for a few
