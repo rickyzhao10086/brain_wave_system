@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../painters/gauge_painter.dart';
 import '../painters/trend_painter.dart';
+import '../services/muse_live_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
 import '../widgets/screen_scaffold.dart';
@@ -14,59 +15,92 @@ import '../widgets/status_pill.dart';
 class AnalysisScreen extends StatelessWidget {
   const AnalysisScreen({super.key});
 
-  // Current reading. Calm -> green traffic light, high confidence.
-  static const _state = 'Calm';
-  static const _stateColor = Color(0xff22c55e);
-  static const _confidence = 0.91;
-
   @override
   Widget build(BuildContext context) {
-    return const ScreenScaffold(
-      children: [
-        _AnalysisHeader(),
-        SizedBox(height: 18),
-        _ReadingHero(
-          state: _state,
-          color: _stateColor,
-          confidence: _confidence,
-        ),
-        SizedBox(height: 12),
-        _MuseQualityRow(),
-        SizedBox(height: 18),
-        SectionTitle(title: 'Muse 2 Body Signals', action: 'PPG + IMU'),
-        SizedBox(height: 10),
-        _MuseBodySignalsCard(),
-        SizedBox(height: 18),
-        SectionTitle(title: 'EEG Band Power', action: 'Relative'),
-        SizedBox(height: 10),
-        _BandPowerCard(),
-        SizedBox(height: 18),
-        SectionTitle(title: 'State Trend', action: 'Last 30m'),
-        SizedBox(height: 10),
-        _TrendCard(color: _stateColor),
-        SizedBox(height: 18),
-        SectionTitle(title: 'Session Interpretation', action: 'Mock'),
-        SizedBox(height: 10),
-        _InterpretationCard(),
-      ],
+    return ListenableBuilder(
+      listenable: MuseLiveService.instance,
+      builder: (context, _) {
+        final service = MuseLiveService.instance;
+        final snapshot = service.snapshot;
+        final stateColor = _stateColor(snapshot.state.label);
+        return ScreenScaffold(
+          children: [
+            _AnalysisHeader(
+              isLive: service.isLive,
+              sourceLabel: service.sourceLabel,
+            ),
+            const SizedBox(height: 18),
+            _ReadingHero(
+              state: snapshot.state.label,
+              color: stateColor,
+              confidence: snapshot.state.confidence,
+            ),
+            const SizedBox(height: 12),
+            _MuseQualityRow(snapshot: snapshot),
+            const SizedBox(height: 18),
+            const SectionTitle(
+              title: 'Muse 2 Body Signals',
+              action: 'PPG + IMU',
+            ),
+            const SizedBox(height: 10),
+            _MuseBodySignalsCard(snapshot: snapshot),
+            const SizedBox(height: 18),
+            SectionTitle(
+              title: 'EEG Band Power',
+              action: service.isLive ? 'Live' : 'Relative',
+            ),
+            const SizedBox(height: 10),
+            _BandPowerCard(bands: snapshot.bands),
+            const SizedBox(height: 18),
+            const SectionTitle(title: 'State Trend', action: 'Last 30m'),
+            const SizedBox(height: 10),
+            _TrendCard(color: stateColor),
+            const SizedBox(height: 18),
+            SectionTitle(
+              title: 'Session Interpretation',
+              action: service.sourceLabel,
+            ),
+            const SizedBox(height: 10),
+            _InterpretationCard(
+              snapshot: snapshot,
+              isLive: service.isLive,
+              sourceLabel: service.sourceLabel,
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  static Color _stateColor(String state) {
+    return switch (state.toLowerCase()) {
+      'calm' => const Color(0xff22c55e),
+      'elevated' => const Color(0xfff59e0b),
+      _ => const Color(0xffff4d6d),
+    };
   }
 }
 
 class _AnalysisHeader extends StatelessWidget {
-  const _AnalysisHeader();
+  const _AnalysisHeader({required this.isLive, required this.sourceLabel});
+
+  final bool isLive;
+  final String sourceLabel;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(
+        const Expanded(
           child: Text(
             'Analysis',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
         ),
-        StatusPill('Live', color: Color(0xff22c55e)),
+        StatusPill(
+          isLive ? sourceLabel : 'Mock',
+          color: isLive ? const Color(0xff22c55e) : const Color(0xfff59e0b),
+        ),
       ],
     );
   }
@@ -224,14 +258,20 @@ class _TrafficLight extends StatelessWidget {
 
 /// Quality of the underlying Muse 2 capture - how trustworthy this reading is.
 class _MuseQualityRow extends StatelessWidget {
-  const _MuseQualityRow();
+  const _MuseQualityRow({required this.snapshot});
+
+  final MuseSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    const stats = [
-      ('90%', 'Contact'),
-      ('256Hz', 'Sample'),
-      ('Low', 'Artifact'),
+    final minContact = snapshot.contact.values.reduce((a, b) => a < b ? a : b);
+    final stats = [
+      ('${(minContact * 100).round()}%', 'Contact'),
+      (
+        snapshot.sampleRate == null ? '--' : '${snapshot.sampleRate}Hz',
+        'Sample',
+      ),
+      (snapshot.state.artifact, 'Artifact'),
     ];
 
     return Row(
@@ -273,43 +313,52 @@ class _MuseQualityRow extends StatelessWidget {
 }
 
 class _MuseBodySignalsCard extends StatelessWidget {
-  const _MuseBodySignalsCard();
+  const _MuseBodySignalsCard({required this.snapshot});
+
+  final MuseSnapshot snapshot;
 
   @override
   Widget build(BuildContext context) {
-    return const NeuroPanel(
+    final body = snapshot.body;
+    return NeuroPanel(
       child: Column(
         children: [
           _BodySignalRow(
             icon: Icons.monitor_heart_rounded,
             label: 'PPG pulse',
-            value: '72 bpm',
-            detail: 'Clean waveform',
-            color: Color(0xffff4d6d),
+            value: body.heartRate == null ? body.ppg : '${body.heartRate} bpm',
+            detail: snapshot.streams.ppg ? 'Live waveform' : 'Waiting for PPG',
+            color: const Color(0xffff4d6d),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           _BodySignalRow(
             icon: Icons.air_rounded,
             label: 'Breathing pace',
-            value: '15 rpm',
-            detail: 'Even rhythm',
-            color: Color(0xff22d3ee),
+            value: body.breathRate == null
+                ? '-- rpm'
+                : '${body.breathRate} rpm',
+            detail: snapshot.streams.acc
+                ? 'Motion-derived estimate'
+                : 'Waiting for ACC',
+            color: const Color(0xff22d3ee),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           _BodySignalRow(
             icon: Icons.screen_rotation_alt_rounded,
             label: 'Head motion',
-            value: '0.04 g',
-            detail: 'Low acceleration',
-            color: Color(0xff8b5cf6),
+            value: '${body.motionG.toStringAsFixed(2)} g',
+            detail: body.motionG < .08 ? 'Low acceleration' : 'Motion artifact',
+            color: const Color(0xff8b5cf6),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           _BodySignalRow(
             icon: Icons.threesixty_rounded,
             label: 'Gyroscope',
-            value: 'Still',
-            detail: 'No rotation artifact',
-            color: Color(0xfff59e0b),
+            value: '${body.gyroDps.toStringAsFixed(1)} dps',
+            detail: body.gyroDps < 5
+                ? 'No rotation artifact'
+                : 'Rotation artifact',
+            color: const Color(0xfff59e0b),
           ),
         ],
       ),
@@ -371,48 +420,66 @@ class _BodySignalRow extends StatelessWidget {
 /// the evidence the model turns into a state. Alpha dominance here is what
 /// reads as "calm".
 class _BandPowerCard extends StatelessWidget {
-  const _BandPowerCard();
+  const _BandPowerCard({required this.bands});
+
+  final MuseBands bands;
 
   @override
   Widget build(BuildContext context) {
-    return const NeuroPanel(
+    final strongest = _strongestBand(bands);
+    return NeuroPanel(
       child: Column(
         children: [
           _BandRow(
             name: 'Delta',
-            range: '0.5–4 Hz',
-            value: .30,
-            color: Color(0xff60a5fa),
+            range: '0.5-4 Hz',
+            value: bands.delta,
+            color: const Color(0xff60a5fa),
+            dominant: strongest == 'Delta',
           ),
           _BandRow(
             name: 'Theta',
-            range: '4–8 Hz',
-            value: .42,
-            color: Color(0xff8b5cf6),
+            range: '4-8 Hz',
+            value: bands.theta,
+            color: const Color(0xff8b5cf6),
+            dominant: strongest == 'Theta',
           ),
           _BandRow(
             name: 'Alpha',
-            range: '8–13 Hz',
-            value: .78,
-            color: Color(0xff22c55e),
-            dominant: true,
+            range: '8-13 Hz',
+            value: bands.alpha,
+            color: const Color(0xff22c55e),
+            dominant: strongest == 'Alpha',
           ),
           _BandRow(
             name: 'Beta',
-            range: '13–30 Hz',
-            value: .35,
-            color: Color(0xff22d3ee),
+            range: '13-30 Hz',
+            value: bands.beta,
+            color: const Color(0xff22d3ee),
+            dominant: strongest == 'Beta',
           ),
           _BandRow(
             name: 'Gamma',
-            range: '30–50 Hz',
-            value: .18,
-            color: Color(0xffd946ef),
+            range: '30-50 Hz',
+            value: bands.gamma,
+            color: const Color(0xffd946ef),
+            dominant: strongest == 'Gamma',
             last: true,
           ),
         ],
       ),
     );
+  }
+
+  static String _strongestBand(MuseBands bands) {
+    final values = {
+      'Delta': bands.delta,
+      'Theta': bands.theta,
+      'Alpha': bands.alpha,
+      'Beta': bands.beta,
+      'Gamma': bands.gamma,
+    };
+    return values.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
   }
 }
 
@@ -553,7 +620,15 @@ class _TrendCard extends StatelessWidget {
 
 /// The model's plain-language reading - what the bands mean for the wearer.
 class _InterpretationCard extends StatelessWidget {
-  const _InterpretationCard();
+  const _InterpretationCard({
+    required this.snapshot,
+    required this.isLive,
+    required this.sourceLabel,
+  });
+
+  final MuseSnapshot snapshot;
+  final bool isLive;
+  final String sourceLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -561,29 +636,30 @@ class _InterpretationCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              IconBadge(
+              const IconBadge(
                 icon: Icons.auto_awesome_rounded,
                 colors: [Color(0xff22c55e), Color(0xff22d3ee)],
               ),
-              SizedBox(width: 12),
-              Expanded(
+              const SizedBox(width: 12),
+              const Expanded(
                 child: Text(
                   'Reading Summary',
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-              StatusPill('Synced', color: Color(0xff22c55e)),
+              StatusPill(
+                isLive ? sourceLabel : 'Mock',
+                color: isLive
+                    ? const Color(0xff22c55e)
+                    : const Color(0xfff59e0b),
+              ),
             ],
           ),
           const SizedBox(height: 14),
           Text(
-            'Alpha power is dominant while beta and gamma stay low. Contact '
-            'quality is usable on all four Muse 2 electrodes, and motion '
-            'artifacts are low, so this mock session can hold a green calm '
-            'state. If contact drops or motion rises, the app should show '
-            'needs-review instead of making a stronger health claim.',
+            _summaryText(snapshot, isLive),
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,
@@ -593,5 +669,17 @@ class _InterpretationCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _summaryText(MuseSnapshot snapshot, bool isLive) {
+    final source = isLive
+        ? 'The live Muse stream reports'
+        : 'The mock preview shows';
+    final minContact = snapshot.contact.values.reduce((a, b) => a < b ? a : b);
+    final contact = '${(minContact * 100).round()}% minimum contact';
+    return '$source ${snapshot.state.label.toLowerCase()} with '
+        '${(snapshot.state.confidence * 100).round()}% confidence, $contact, '
+        'and ${snapshot.state.artifact.toLowerCase()} artifact. Treat this as '
+        'a session-readiness signal until a validated classifier is added.';
   }
 }
