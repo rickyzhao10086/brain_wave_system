@@ -2,7 +2,49 @@
 
 CerebroSync is a Flutter prototype for live Muse 2 sessions. The mobile app can
 connect directly to a Muse 2 over Bluetooth Low Energy and decode its sensor
-packets on the phone. Firebase and persisted session records are not connected.
+packets on the phone. Firebase Authentication manages email/password accounts,
+and Cloud Firestore stores profiles plus compact session checkpoints.
+
+## Firebase setup
+
+The checked-in FlutterFire configuration points Android and iOS at the Firebase
+project `cerebrosync-b79a9`. Complete these console steps before testing:
+
+1. In **Authentication > Sign-in method**, enable **Email/Password**.
+2. Leave **Anonymous** disabled. The app has no guest path, and its Firestore
+   rules also reject anonymous-auth tokens.
+3. In **Firestore Database**, create the `(default)` database in production
+   mode. Choose a region close to the expected users; it cannot be changed
+   later.
+4. Deploy the owner-only rules and indexes from this directory:
+
+```bash
+firebase login
+firebase use cerebrosync-b79a9
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+5. In **Authentication > Templates**, customize the email verification and
+   password reset sender names and messages for CerebroSync.
+
+No Cloud Functions or Cloud Storage setup is required. Raw EEG stays on the
+phone. While cloud recording is enabled, each active session stores one compact
+sample and updates its session summary once per minute, plus start/end and
+profile writes. That is about 120 writes per streaming hour, which is designed
+to remain practical under the Spark plan's daily Firestore allowance during
+development.
+
+Firestore paths:
+
+```text
+users/{uid}
+users/{uid}/sessions/{sessionId}
+users/{uid}/sessions/{sessionId}/samples/{sampleId}
+```
+
+After basic device testing, enable Firebase App Check using App Attest or
+DeviceCheck on iOS and Play Integrity on Android. Register debug tokens before
+enforcing App Check in development.
 
 ## Direct phone test
 
@@ -21,7 +63,8 @@ flutter run -d YOUR_PHONE_DEVICE_ID
 ```
 
 5. Accept the Bluetooth or Nearby Devices permission prompt.
-6. Continue as guest, open the `Device` tab, and tap `Scan for Muse 2`.
+6. Create an email/password account or sign in, open the `Device` tab, and tap
+   `Scan for Muse 2`.
 
 The app scans for devices whose advertised name starts with `Muse`, connects,
 subscribes to EEG, PPG, accelerometer, gyroscope, and telemetry characteristics,
@@ -38,6 +81,8 @@ app connects to it as a BLE peripheral.
 - Accelerometer and gyroscope motion summaries.
 - Battery telemetry when the headband sends it.
 - Relative EEG band power computed locally in Dart.
+- User profiles, session history, and one-minute feature checkpoints in
+  Firestore.
 - Foreground sessions only. Background streaming and automatic reconnection are
   not enabled yet.
 - Contact quality, pulse rate, EEG state, and artifact labels are prototype

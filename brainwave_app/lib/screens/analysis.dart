@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../painters/gauge_painter.dart';
 import '../painters/trend_painter.dart';
+import '../services/firebase_data_service.dart';
 import '../services/muse_live_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
@@ -18,9 +19,13 @@ class AnalysisScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: MuseLiveService.instance,
+      listenable: Listenable.merge([
+        MuseLiveService.instance,
+        FirebaseDataService.instance,
+      ]),
       builder: (context, _) {
         final service = MuseLiveService.instance;
+        final firebase = FirebaseDataService.instance;
         final snapshot = service.snapshot;
         final stateColor = _stateColor(snapshot.state.label);
         return ScreenScaffold(
@@ -52,9 +57,19 @@ class AnalysisScreen extends StatelessWidget {
             const SizedBox(height: 10),
             _BandPowerCard(bands: snapshot.bands),
             const SizedBox(height: 18),
-            const SectionTitle(title: 'State Trend', action: 'Last 30m'),
+            SectionTitle(
+              title: 'State Trend',
+              action: firebase.trendPoints.isEmpty
+                  ? 'Waiting'
+                  : '${firebase.trendPoints.length} checkpoints',
+            ),
             const SizedBox(height: 10),
-            _TrendCard(color: stateColor),
+            _TrendCard(
+              color: stateColor,
+              values: firebase.trendPoints
+                  .map((point) => point.calmIndex)
+                  .toList(growable: false),
+            ),
             const SizedBox(height: 18),
             SectionTitle(
               title: 'Session Interpretation',
@@ -567,9 +582,10 @@ class _BandRow extends StatelessWidget {
 
 /// How the reading has moved across the recent window.
 class _TrendCard extends StatelessWidget {
-  const _TrendCard({required this.color});
+  const _TrendCard({required this.color, required this.values});
 
   final Color color;
+  final List<double> values;
 
   @override
   Widget build(BuildContext context) {
@@ -596,13 +612,15 @@ class _TrendCard extends StatelessWidget {
           SizedBox(
             height: 110,
             width: double.infinity,
-            child: CustomPaint(painter: TrendPainter(color: color)),
+            child: CustomPaint(
+              painter: TrendPainter(color: color, values: values),
+            ),
           ),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              for (final label in ['30m', '20m', '10m', 'Now'])
+              for (final label in ['Oldest', '', '', 'Latest'])
                 Text(
                   label,
                   style: TextStyle(

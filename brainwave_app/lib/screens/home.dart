@@ -4,6 +4,7 @@ import '../painters/brain_map_painter.dart';
 import '../painters/signal_painter.dart';
 import '../painters/trend_painter.dart';
 import '../services/auth_service.dart';
+import '../services/firebase_data_service.dart';
 import '../services/muse_live_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
@@ -17,15 +18,23 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: MuseLiveService.instance,
+      listenable: Listenable.merge([
+        MuseLiveService.instance,
+        FirebaseDataService.instance,
+      ]),
       builder: (context, _) {
         final service = MuseLiveService.instance;
+        final firebase = FirebaseDataService.instance;
         final snapshot = service.snapshot;
         return ScreenScaffold(
           children: [
             _HomeHeader(isLive: service.isLive),
             const SizedBox(height: 18),
-            _MuseSessionCard(service: service, snapshot: snapshot),
+            _MuseSessionCard(
+              service: service,
+              snapshot: snapshot,
+              firebase: firebase,
+            ),
             const SizedBox(height: 18),
             SectionTitle(
               title: 'Electrode Contact',
@@ -112,10 +121,15 @@ class _HomeHeader extends StatelessWidget {
 }
 
 class _MuseSessionCard extends StatelessWidget {
-  const _MuseSessionCard({required this.service, required this.snapshot});
+  const _MuseSessionCard({
+    required this.service,
+    required this.snapshot,
+    required this.firebase,
+  });
 
   final MuseLiveService service;
   final MuseSnapshot snapshot;
+  final FirebaseDataService firebase;
 
   @override
   Widget build(BuildContext context) {
@@ -144,6 +158,28 @@ class _MuseSessionCard extends StatelessWidget {
               StatusPill(
                 _statusText(service.status),
                 color: _statusColor(service.status),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Icon(
+                firebase.isRecording
+                    ? Icons.cloud_upload_rounded
+                    : Icons.cloud_done_rounded,
+                size: 16,
+                color: _firebaseColor(firebase.status),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  _firebaseText(firebase),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .58),
+                    fontSize: 11,
+                  ),
+                ),
               ),
             ],
           ),
@@ -228,6 +264,24 @@ class _MuseSessionCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static String _firebaseText(FirebaseDataService service) {
+    if (service.status == FirebaseSyncStatus.error) {
+      return service.lastError ?? 'Cloud sync needs attention';
+    }
+    if (service.isRecording) return 'Cloud checkpoint every minute';
+    if (service.status == FirebaseSyncStatus.syncing) return 'Syncing Firebase';
+    return 'Firebase ready';
+  }
+
+  static Color _firebaseColor(FirebaseSyncStatus status) {
+    return switch (status) {
+      FirebaseSyncStatus.error => const Color(0xffff4d6d),
+      FirebaseSyncStatus.syncing => const Color(0xfff59e0b),
+      FirebaseSyncStatus.ready => const Color(0xff22c55e),
+      FirebaseSyncStatus.unavailable => Colors.white38,
+    };
   }
 
   static String _statusText(MuseConnectionStatus status) {

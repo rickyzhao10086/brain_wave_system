@@ -6,8 +6,7 @@ import 'app_shell.dart';
 
 /// Decides what the app opens to: the login/signup flow until the user is
 /// authenticated, then the main shell. Rebuilds automatically when auth state
-/// changes (sign in, guest, or sign out). When Firebase lands, point the
-/// [listenable] at a stream-backed notifier over `authStateChanges()`.
+/// changes through the Firebase-backed auth service.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 

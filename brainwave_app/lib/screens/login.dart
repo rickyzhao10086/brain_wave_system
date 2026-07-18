@@ -6,9 +6,7 @@ import '../widgets/neuro_panel.dart';
 
 /// The login / signup gate shown before the app when no user is signed in.
 ///
-/// The backend is Firebase, but it isn't connected yet, so submitting runs in
-/// demo mode via [AuthService] — credentials are validated for shape only and
-/// the call is bypassed. "Skip for now" enters as a guest with no account.
+/// Email/password authentication backed by Firebase Auth.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -49,8 +47,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _email.text.trim();
     final password = _password.text;
 
-    // Light, shape-only validation so the form feels real. The backend is
-    // bypassed, so any well-formed input is accepted.
     final problem = _validate(name: name, email: email, password: password);
     if (problem != null) {
       setState(() => _error = problem);
@@ -66,11 +62,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_isLogin) {
         await AuthService.instance.signIn(email: email, password: password);
       } else {
-        await AuthService.instance
-            .signUp(name: name, email: email, password: password);
+        await AuthService.instance.signUp(
+          name: name,
+          email: email,
+          password: password,
+        );
       }
       // On success AuthService notifies the AuthGate, which swaps this screen
       // out for the app — nothing else to do here.
+    } on AuthServiceException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } catch (_) {
       if (mounted) setState(() => _error = 'Something went wrong. Try again.');
     } finally {
@@ -93,10 +94,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  Future<void> _skip() async {
-    await AuthService.instance.continueAsGuest();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -111,8 +108,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const _Brand(),
                   const SizedBox(height: 22),
-                  const _DemoNotice(),
-                  const SizedBox(height: 16),
                   _formCard(),
                 ],
               ),
@@ -193,30 +188,35 @@ class _LoginScreenState extends State<LoginScreen> {
             colors: _accent,
             onPressed: _submit,
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _loading ? null : _skip,
-            child: Text(
-              'Skip for now',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: .6),
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  void _onForgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Password reset is available once the backend is connected.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _onForgotPassword() async {
+    final email = _email.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Enter your email address first.');
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.sendPasswordReset(email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password reset email sent.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on AuthServiceException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 }
 
@@ -231,7 +231,11 @@ class _Brand extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             boxShadow: const [
-              BoxShadow(color: Color(0x5517d6c0), blurRadius: 28, spreadRadius: 1),
+              BoxShadow(
+                color: Color(0x5517d6c0),
+                blurRadius: 28,
+                spreadRadius: 1,
+              ),
             ],
           ),
           child: const IconBadge(
@@ -258,40 +262,6 @@ class _Brand extends StatelessWidget {
   }
 }
 
-/// Honest banner so nobody mistakes the bypass for a working backend.
-class _DemoNotice extends StatelessWidget {
-  const _DemoNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    const amber = Color(0xfff59e0b);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: amber.withValues(alpha: .1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: amber.withValues(alpha: .3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.cloud_off_rounded, color: amber, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Demo mode — Firebase backend not connected yet. Sign-in is bypassed.',
-              style: TextStyle(
-                color: amber.withValues(alpha: .95),
-                fontSize: 11,
-                height: 1.3,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ModeToggle extends StatelessWidget {
   const _ModeToggle({required this.isLogin, required this.onChanged});
 
@@ -309,7 +279,9 @@ class _ModeToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: _segment('Login', isLogin, () => onChanged?.call(true))),
+          Expanded(
+            child: _segment('Login', isLogin, () => onChanged?.call(true)),
+          ),
           Expanded(
             child: _segment('Sign Up', !isLogin, () => onChanged?.call(false)),
           ),
@@ -328,7 +300,9 @@ class _ModeToggle extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: active
-              ? const LinearGradient(colors: [Color(0xff17d6c0), Color(0xff8b5cf6)])
+              ? const LinearGradient(
+                  colors: [Color(0xff17d6c0), Color(0xff8b5cf6)],
+                )
               : null,
           borderRadius: BorderRadius.circular(9),
         ),
@@ -370,9 +344,9 @@ class _AuthField extends StatelessWidget {
   Widget build(BuildContext context) {
     final faint = Colors.white.withValues(alpha: .45);
     OutlineInputBorder border(Color color) => OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: color),
-        );
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: color),
+    );
 
     return TextField(
       controller: controller,
@@ -389,7 +363,10 @@ class _AuthField extends StatelessWidget {
         suffixIcon: trailing,
         filled: true,
         fillColor: const Color(0xff0f111c),
-        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 14,
+          horizontal: 12,
+        ),
         enabledBorder: border(Colors.white.withValues(alpha: .08)),
         focusedBorder: border(const Color(0xff22d3ee)),
       ),
@@ -406,7 +383,11 @@ class _ErrorText extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.error_outline_rounded, color: Color(0xffff4d6d), size: 15),
+        const Icon(
+          Icons.error_outline_rounded,
+          color: Color(0xffff4d6d),
+          size: 15,
+        ),
         const SizedBox(width: 6),
         Expanded(
           child: Text(

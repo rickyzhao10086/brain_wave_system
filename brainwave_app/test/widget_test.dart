@@ -17,14 +17,17 @@ void main() {
   });
 
   testWidgets('renders the dashboard once signed in', (tester) async {
-    await AuthService.instance.continueAsGuest();
+    await AuthService.instance.signUp(
+      name: 'Test User',
+      email: 'test@example.com',
+      password: 'test-password',
+    );
     await tester.pumpWidget(const CerebroSyncApp());
     await tester.pumpAndSettle();
 
-    // Header greets the signed-in user (guest here) rather than the app name.
+    // Header greets the signed-in user rather than the app name.
     expect(find.text('Muse 2 Session'), findsOneWidget);
-    // The guest name is shown dynamically (home header + profile card).
-    expect(find.text('Guest'), findsWidgets);
+    expect(find.text('Test User'), findsWidgets);
     expect(find.text('Muse 2 Ready'), findsOneWidget);
     expect(find.text('Electrode Contact'), findsOneWidget);
     expect(find.text('Live Sensor Snapshot'), findsOneWidget);

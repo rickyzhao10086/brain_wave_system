@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/firebase_data_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
 import '../widgets/screen_scaffold.dart';
@@ -11,36 +12,43 @@ class ModelScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const ScreenScaffold(
-      children: [
-        _ModelHeader(),
-        SizedBox(height: 18),
-        _PipelineCard(),
-        SizedBox(height: 18),
-        SectionTitle(title: 'Desktop Models', action: 'Python'),
-        SizedBox(height: 10),
-        _ModelInfoCard(
-          icon: Icons.filter_alt_rounded,
-          title: 'Muse 2 Feature Prep',
-          subtitle: 'EEG bands, contact quality, PPG, and IMU artifacts',
-          metricOne: '4 Sensors',
-          metricTwo: 'EEG+Body',
-          color: Color(0xff22d3ee),
-        ),
-        SizedBox(height: 10),
-        _ModelInfoCard(
-          icon: Icons.psychology_rounded,
-          title: 'Session Classifier',
-          subtitle: 'Maps clean sensor windows to calm, elevated, or review',
-          metricOne: '3 States',
-          metricTwo: 'Readiness',
-          color: Color(0xff8b5cf6),
-        ),
-        SizedBox(height: 18),
-        SectionTitle(title: 'LLM API', action: 'Pending'),
-        SizedBox(height: 10),
-        _OpenAiCard(),
-      ],
+    return ListenableBuilder(
+      listenable: FirebaseDataService.instance,
+      builder: (context, _) => ScreenScaffold(
+        children: [
+          const _ModelHeader(),
+          const SizedBox(height: 18),
+          const _PipelineCard(),
+          const SizedBox(height: 18),
+          const SectionTitle(title: 'On-device Models', action: 'Dart'),
+          const SizedBox(height: 10),
+          const _ModelInfoCard(
+            icon: Icons.filter_alt_rounded,
+            title: 'Muse 2 Feature Prep',
+            subtitle: 'EEG bands, contact quality, PPG, and IMU artifacts',
+            metricOne: '4 Sensors',
+            metricTwo: 'EEG+Body',
+            color: Color(0xff22d3ee),
+          ),
+          const SizedBox(height: 10),
+          const _ModelInfoCard(
+            icon: Icons.psychology_rounded,
+            title: 'Session Classifier',
+            subtitle: 'Maps clean sensor windows to calm, elevated, or review',
+            metricOne: '3 States',
+            metricTwo: 'Readiness',
+            color: Color(0xff8b5cf6),
+          ),
+          const SizedBox(height: 18),
+          const SectionTitle(title: 'Firebase', action: 'Firestore'),
+          const SizedBox(height: 10),
+          _CloudSyncCard(service: FirebaseDataService.instance),
+          const SizedBox(height: 18),
+          const SectionTitle(title: 'LLM API', action: 'Pending'),
+          const SizedBox(height: 10),
+          const _OpenAiCard(),
+        ],
+      ),
     );
   }
 }
@@ -90,7 +98,7 @@ class _PipelineCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Muse 2 signals are represented here as frontend mock data until hardware and Firebase are connected. The intended pipeline combines EEG band power, electrode contact, PPG pulse, breathing pace, and IMU artifact features before producing a session readiness label.',
+            'Muse 2 packets are decoded and summarized on this phone. EEG band power, electrode contact, PPG pulse, breathing pace, and IMU artifact features produce a non-clinical session readiness label without sending raw EEG to Firebase.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,
@@ -110,6 +118,62 @@ class _PipelineCard extends StatelessWidget {
                 child: _Metric(label: 'Output', value: 'R/Y/G'),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CloudSyncCard extends StatelessWidget {
+  const _CloudSyncCard({required this.service});
+
+  final FirebaseDataService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final isError = service.status == FirebaseSyncStatus.error;
+    return NeuroPanel(
+      child: Row(
+        children: [
+          IconBadge(
+            icon: Icons.cloud_sync_rounded,
+            colors: [
+              isError ? const Color(0xffff4d6d) : const Color(0xff22c55e),
+              const Color(0xff22d3ee),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  service.isRecording
+                      ? 'Session checkpoints active'
+                      : 'Session sync ready',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  isError
+                      ? service.lastError ?? 'Cloud sync needs attention.'
+                      : 'Compact summaries are saved once per minute.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: .58),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          StatusPill(
+            isError
+                ? 'Error'
+                : service.isRecording
+                ? 'Live'
+                : 'Ready',
+            color: isError ? const Color(0xffff4d6d) : const Color(0xff22c55e),
           ),
         ],
       ),

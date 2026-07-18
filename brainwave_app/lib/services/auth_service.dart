@@ -1,63 +1,90 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-/// A signed-in user. The fields mirror what we'll read off Firebase's `User`
-/// object so screens won't need to change when the real backend is wired in.
 class AuthUser {
-  const AuthUser({required this.uid, required this.email, this.displayName});
+  const AuthUser({
+    required this.uid,
+    required this.email,
+    required this.isAnonymous,
+    required this.emailVerified,
+    this.displayName,
+  });
 
   final String uid;
   final String email;
   final String? displayName;
+  final bool isAnonymous;
+  final bool emailVerified;
 
-  /// Human-friendly name: the display name when set, otherwise the email
-  /// handle (capitalised). Always non-empty for a signed-in user.
   String get displayLabel {
     final name = displayName?.trim();
     if (name != null && name.isNotEmpty) return name;
+    if (isAnonymous) return 'Guest';
 
     final handle = email.split('@').first;
     if (handle.isNotEmpty) {
       return handle[0].toUpperCase() + handle.substring(1);
     }
-    return email;
+    return 'CerebroSync user';
   }
 }
 
-/// Authentication for CerebroSync.
-///
-/// The intended backend is **Firebase Auth**, but it can't be provisioned yet
-/// (the developer is in a region where Firebase setup is blocked for a few
-/// weeks). Until then every method here BYPASSES the network and fakes a
-/// successful result, so the rest of the app can be built and demoed.
-///
-/// When Firebase is ready:
-///   1. add `firebase_core` + `firebase_auth` to pubspec and run FlutterFire,
-///   2. replace each body marked `TODO(firebase)` with the matching call,
-///   3. swap `currentUser`/`isSignedIn` to listen to `authStateChanges()`.
-/// The public surface already matches FirebaseAuth, so callers stay untouched.
+class AuthServiceException implements Exception {
+  const AuthServiceException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AuthService extends ChangeNotifier {
   AuthService._();
 
-  /// Single shared instance — stands in for `FirebaseAuth.instance`.
   static final AuthService instance = AuthService._();
 
+  FirebaseAuth? _auth;
   AuthUser? _currentUser;
+  Future<void> Function()? _beforeSignOut;
+
   AuthUser? get currentUser => _currentUser;
   bool get isSignedIn => _currentUser != null;
+  bool get isFirebaseReady => _auth != null;
 
-  /// Fakes the round-trip latency of a real auth call so the UI's loading
-  /// state is exercised. Delete once Firebase is handling the request.
-  static const _fakeLatency = Duration(milliseconds: 900);
-
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
-    await Future.delayed(_fakeLatency);
-    // TODO(firebase): await FirebaseAuth.instance
-    //     .signInWithEmailAndPassword(email: email, password: password);
-    _currentUser = AuthUser(uid: _localUid(email), email: email.trim());
+  Future<void> initialize() async {
+    if (_auth != null) return;
+    final auth = FirebaseAuth.instance;
+    if (auth.currentUser?.isAnonymous == true) {
+      await auth.signOut();
+    }
+    _auth = auth;
+    _currentUser = _mapUser(auth.currentUser);
+    auth.userChanges().listen((user) {
+      _currentUser = _mapUser(user);
+      notifyListeners();
+    });
     notifyListeners();
+  }
+
+  void registerBeforeSignOut(Future<void> Function() callback) {
+    _beforeSignOut = callback;
+  }
+
+  Future<void> signIn({required String email, required String password}) async {
+    final auth = _auth;
+    if (auth == null) {
+      _setLocalUser(email: email);
+      return;
+    }
+
+    try {
+      await auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
   }
 
   Future<void> signUp({
@@ -65,38 +92,126 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    await Future.delayed(_fakeLatency);
-    // TODO(firebase): create the user, then user.updateDisplayName(name):
-    //   final cred = await FirebaseAuth.instance
-    //       .createUserWithEmailAndPassword(email: email, password: password);
-    //   await cred.user?.updateDisplayName(name);
-    _currentUser = AuthUser(
-      uid: _localUid(email),
-      email: email.trim(),
-      displayName: name.trim(),
-    );
-    notifyListeners();
+    final auth = _auth;
+    if (auth == null) {
+      _setLocalUser(email: email, displayName: name);
+      return;
+    }
+
+    try {
+      final credential = await auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      await credential.user?.updateDisplayName(name.trim());
+      await credential.user?.sendEmailVerification();
+      await credential.user?.reload();
+      _currentUser = _mapUser(auth.currentUser);
+      notifyListeners();
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
   }
 
-  /// "Skip for now" — lets the team use the app before any account exists.
-  Future<void> continueAsGuest() async {
-    // TODO(firebase): await FirebaseAuth.instance.signInAnonymously();
-    _currentUser = const AuthUser(
-      uid: 'guest',
-      email: 'guest@neuromotion.local',
-      displayName: 'Guest',
-    );
-    notifyListeners();
+  Future<void> sendPasswordReset(String email) async {
+    final auth = _auth;
+    if (auth == null) return;
+    try {
+      await auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
+  }
+
+  Future<void> updateDisplayName(String name) async {
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) {
+      throw const AuthServiceException('Enter a display name.');
+    }
+    final auth = _auth;
+    if (auth == null) {
+      final current = _currentUser;
+      if (current == null) return;
+      _currentUser = AuthUser(
+        uid: current.uid,
+        email: current.email,
+        displayName: cleanName,
+        isAnonymous: current.isAnonymous,
+        emailVerified: current.emailVerified,
+      );
+      notifyListeners();
+      return;
+    }
+
+    try {
+      await auth.currentUser?.updateDisplayName(cleanName);
+      await auth.currentUser?.reload();
+      _currentUser = _mapUser(auth.currentUser);
+      notifyListeners();
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
+  }
+
+  Future<void> resendEmailVerification() async {
+    final user = _auth?.currentUser;
+    if (user == null || user.isAnonymous || user.emailVerified) return;
+    try {
+      await user.sendEmailVerification();
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
   }
 
   Future<void> signOut() async {
-    // TODO(firebase): await FirebaseAuth.instance.signOut();
-    _currentUser = null;
+    await _beforeSignOut?.call();
+    final auth = _auth;
+    if (auth == null) {
+      _currentUser = null;
+      notifyListeners();
+      return;
+    }
+    await auth.signOut();
+  }
+
+  void _setLocalUser({required String email, String? displayName}) {
+    final cleanEmail = email.trim();
+    _currentUser = AuthUser(
+      uid: 'local-${cleanEmail.toLowerCase().hashCode}',
+      email: cleanEmail,
+      displayName: displayName?.trim(),
+      isAnonymous: false,
+      emailVerified: false,
+    );
     notifyListeners();
   }
 
-  /// Deterministic placeholder uid so the same email maps to the same "user"
-  /// within a session. Replaced by Firebase's real uid later.
-  String _localUid(String email) =>
-      'local-${email.trim().toLowerCase().hashCode}';
+  static AuthUser? _mapUser(User? user) {
+    if (user == null) return null;
+    return AuthUser(
+      uid: user.uid,
+      email: user.email ?? '',
+      displayName: user.displayName,
+      isAnonymous: user.isAnonymous,
+      emailVerified: user.emailVerified,
+    );
+  }
+
+  static String _messageFor(FirebaseAuthException error) {
+    return switch (error.code) {
+      'invalid-email' => 'Enter a valid email address.',
+      'invalid-credential' ||
+      'user-not-found' ||
+      'wrong-password' => 'The email or password is incorrect.',
+      'email-already-in-use' => 'An account already uses this email.',
+      'weak-password' => 'Choose a stronger password.',
+      'user-disabled' => 'This account has been disabled.',
+      'operation-not-allowed' =>
+        'This sign-in method is not enabled for this Firebase project.',
+      'network-request-failed' =>
+        'The network is unavailable. Check your connection and retry.',
+      'too-many-requests' => 'Too many attempts. Wait a moment and retry.',
+      _ => error.message ?? 'Authentication failed. Try again.',
+    };
+  }
 }

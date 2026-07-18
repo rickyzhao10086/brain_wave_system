@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "424330738470",
+    "project_id": "cerebrosync-b79a9",
+    "storage_bucket": "cerebrosync-b79a9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:424330738470:android:27079b4c27abd5251e5fe7",
+        "android_client_info": {
+          "package_name": "com.ricky.neuromotion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyABddCFM1AmTd3I9k_TW4ixolVi5CftdbU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
