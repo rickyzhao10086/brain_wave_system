@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
+import '../widgets/policy_link.dart';
 
 /// The login / signup gate shown before the app when no user is signed in.
 ///
@@ -109,6 +110,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   const _Brand(),
                   const SizedBox(height: 22),
                   _formCard(),
+                  const SizedBox(height: 14),
+                  // Both stores expect the policy to be reachable before an
+                  // account is created, not only from inside the app.
+                  const Center(child: PolicyLink.privacy()),
                 ],
               ),
             ),

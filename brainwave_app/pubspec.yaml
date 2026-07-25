@@ -39,6 +39,7 @@ dependencies:
   firebase_core: ^4.12.1
   flutter_launcher_icons: ^0.14.4
   universal_ble: 2.1.0
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

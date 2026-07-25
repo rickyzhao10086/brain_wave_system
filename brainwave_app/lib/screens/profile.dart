@@ -4,6 +4,7 @@ import '../services/auth_service.dart';
 import '../services/firebase_data_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
+import '../widgets/policy_link.dart';
 import '../widgets/screen_scaffold.dart';
 import '../widgets/section_title.dart';
 import '../widgets/status_pill.dart';
@@ -97,6 +98,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 10),
             _SessionHistoryCard(sessions: data.recentSessions),
+            const SizedBox(height: 18),
+            const SectionTitle(title: 'Account', action: 'Permanent'),
+            const SizedBox(height: 10),
+            _DeleteAccountCard(onDelete: _confirmDeleteAccount),
           ],
         );
       },
@@ -148,6 +153,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    // Held before the await: a successful deletion unmounts this screen when
+    // the auth gate swaps back to login, and the root messenger outlives it.
+    final messenger = ScaffoldMessenger.of(context);
+    final deleted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const _DeleteAccountDialog(),
+    );
+    if (deleted != true) return;
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Your account and session data were deleted.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void _showMessage(String message) {
@@ -412,6 +435,266 @@ class _SettingsCard extends StatelessWidget {
       filled: true,
       fillColor: const Color(0xff0f111c),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+    );
+  }
+}
+
+/// Account deletion entry point, required by App Store Guideline 5.1.1(v) and
+/// Google Play's account deletion policy for any app that creates accounts.
+class _DeleteAccountCard extends StatelessWidget {
+  const _DeleteAccountCard({required this.onDelete});
+
+  static const _danger = Color(0xffff4d6d);
+
+  final Future<void> Function() onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return NeuroPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const IconBadge(
+                icon: Icons.delete_forever_rounded,
+                colors: [_danger, Color(0xff7f1d3a)],
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Delete account',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                ),
+              ),
+              const StatusPill('Permanent', color: _danger),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Removes your profile, every synced session and its checkpoints, '
+            'and your CerebroSync sign-in. This cannot be undone.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: .62),
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const PolicyLink.privacy(),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onDelete,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _danger,
+                side: const BorderSide(color: _danger, width: 1.2),
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Delete my account'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Confirms deletion and collects the password Firebase needs to re-authenticate.
+///
+/// The work runs here rather than in the caller so a wrong password reports
+/// itself inline and the user can correct it without reopening the dialog.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  static const _danger = Color(0xffff4d6d);
+
+  final _password = TextEditingController();
+  bool _obscure = true;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_busy,
+      child: AlertDialog(
+        backgroundColor: const Color(0xff0f111c),
+        title: const Text(
+          'Delete account?',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This permanently deletes:',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .72),
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const _DeleteBullet('Your profile, notes, and preferences'),
+              const _DeleteBullet('Every synced session and its checkpoints'),
+              const _DeleteBullet('Your CerebroSync sign-in'),
+              const SizedBox(height: 12),
+              Text(
+                'Raw EEG was never uploaded, so nothing else is kept. '
+                'This cannot be undone.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: .55),
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _password,
+                obscureText: _obscure,
+                enabled: !_busy,
+                autofocus: true,
+                onSubmitted: (_) => _delete(),
+                decoration: InputDecoration(
+                  labelText: 'Confirm your password',
+                  prefixIcon: const Icon(Icons.lock_rounded, size: 19),
+                  filled: true,
+                  fillColor: const Color(0xff080914),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  suffixIcon: IconButton(
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    icon: Icon(
+                      _obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
+                      size: 19,
+                      color: Colors.white.withValues(alpha: .45),
+                    ),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: _danger, fontSize: 11.5),
+                ),
+              ],
+              if (_busy) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Deleting your sessions...',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: .6),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: _busy ? null : _delete,
+            style: FilledButton.styleFrom(backgroundColor: _danger),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _delete() async {
+    if (_busy) return;
+    if (_password.text.isEmpty) {
+      setState(() => _error = 'Enter your password to confirm.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await AuthService.instance.deleteAccount(password: _password.text);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on AuthServiceException catch (error) {
+      _fail(error.message);
+    } on DataServiceException catch (error) {
+      _fail(error.message);
+    } catch (_) {
+      _fail('Could not delete the account. Try again.');
+    }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _error = message;
+    });
+  }
+}
+
+class _DeleteBullet extends StatelessWidget {
+  const _DeleteBullet(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.remove_circle_outline_rounded,
+            size: 14,
+            color: Color(0xffff4d6d),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: .72),
+                fontSize: 12,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -46,6 +46,7 @@ class AuthService extends ChangeNotifier {
   FirebaseAuth? _auth;
   AuthUser? _currentUser;
   Future<void> Function()? _beforeSignOut;
+  Future<void> Function()? _onDeleteAccountData;
 
   AuthUser? get currentUser => _currentUser;
   bool get isSignedIn => _currentUser != null;
@@ -68,6 +69,17 @@ class AuthService extends ChangeNotifier {
 
   void registerBeforeSignOut(Future<void> Function() callback) {
     _beforeSignOut = callback;
+  }
+
+  /// Registers the step that erases the user's stored data during account
+  /// deletion. It runs while the account is still signed in, because the
+  /// Firestore rules only let the owner delete their own documents.
+  ///
+  /// The callback must throw if it cannot finish: [deleteAccount] treats a
+  /// failure here as a reason to keep the account, so the user can retry
+  /// instead of being left with data nobody can reach.
+  void registerDeleteAccountData(Future<void> Function() callback) {
+    _onDeleteAccountData = callback;
   }
 
   Future<void> signIn({required String email, required String password}) async {
@@ -174,6 +186,60 @@ class AuthService extends ChangeNotifier {
     await auth.signOut();
   }
 
+  /// Permanently deletes the signed-in account and everything stored under it.
+  ///
+  /// Runs in a deliberate order:
+  ///  1. Re-authenticate. Firebase requires a recent login before a delete, and
+  ///     doing it first means a wrong password fails before any data is gone.
+  ///  2. Erase the Firestore data, while the account still has permission to.
+  ///  3. Delete the auth user last, so a failure at any earlier step leaves a
+  ///     working account the user can retry with.
+  ///
+  /// Throws [AuthServiceException] if the password is wrong or the account
+  /// cannot be deleted. Data-layer failures propagate from the callback
+  /// registered through [registerDeleteAccountData].
+  Future<void> deleteAccount({required String password}) async {
+    final auth = _auth;
+    if (auth == null) {
+      // Firebase-less fallback, used by widget tests and by builds where
+      // Firebase failed to start. There is no server-side account to remove.
+      await _onDeleteAccountData?.call();
+      _currentUser = null;
+      notifyListeners();
+      return;
+    }
+
+    final user = auth.currentUser;
+    if (user == null) {
+      throw const AuthServiceException('You are already signed out.');
+    }
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw const AuthServiceException(
+        'This account has no email address to confirm the deletion with.',
+      );
+    }
+    if (password.isEmpty) {
+      throw const AuthServiceException('Enter your password to confirm.');
+    }
+
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
+
+    await _onDeleteAccountData?.call();
+
+    try {
+      await (auth.currentUser ?? user).delete();
+    } on FirebaseAuthException catch (error) {
+      throw AuthServiceException(_messageFor(error));
+    }
+  }
+
   void _setLocalUser({required String email, String? displayName}) {
     final cleanEmail = email.trim();
     _currentUser = AuthUser(
@@ -206,6 +272,9 @@ class AuthService extends ChangeNotifier {
       'email-already-in-use' => 'An account already uses this email.',
       'weak-password' => 'Choose a stronger password.',
       'user-disabled' => 'This account has been disabled.',
+      'requires-recent-login' =>
+        'For your security, sign out and sign back in, then delete the account.',
+      'user-mismatch' => 'Those credentials belong to a different account.',
       'operation-not-allowed' =>
         'This sign-in method is not enabled for this Firebase project.',
       'network-request-failed' =>

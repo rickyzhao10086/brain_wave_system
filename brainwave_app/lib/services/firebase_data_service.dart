@@ -9,6 +9,15 @@ import 'muse_live_service.dart';
 
 enum FirebaseSyncStatus { unavailable, ready, syncing, error }
 
+class DataServiceException implements Exception {
+  const DataServiceException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class CerebroProfile {
   const CerebroProfile({
     required this.uid,
@@ -108,6 +117,15 @@ class FirebaseDataService extends ChangeNotifier {
 
   static const checkpointInterval = Duration(minutes: 1);
 
+  /// Documents read per page while erasing an account. Well under the 500-write
+  /// batch ceiling so a page of samples always fits in one commit.
+  static const _deletePageSize = 200;
+
+  /// Ceiling on a single network step of the deletion. Firestore keeps writes
+  /// pending forever when offline, and a delete that hangs behind a spinner is
+  /// worse than one that reports it needs a connection.
+  static const _deleteTimeout = Duration(seconds: 30);
+
   FirebaseFirestore? _firestore;
   FirebaseAuth? _auth;
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
@@ -127,6 +145,7 @@ class FirebaseDataService extends ChangeNotifier {
   String? _trendSessionId;
   bool _wasMuseLive = false;
   bool _startingSession = false;
+  bool _deleting = false;
   bool _checkpointInFlight = false;
   Future<void>? _checkpointFuture;
   int _bindingGeneration = 0;
@@ -152,6 +171,7 @@ class FirebaseDataService extends ChangeNotifier {
 
     MuseLiveService.instance.addListener(_handleMuseChange);
     AuthService.instance.registerBeforeSignOut(endActiveSession);
+    AuthService.instance.registerDeleteAccountData(deleteAccountData);
     _auth!.userChanges().listen((user) {
       unawaited(_bindUser(user));
     });
@@ -204,7 +224,133 @@ class FirebaseDataService extends ChangeNotifier {
     }
   }
 
+  /// Erases everything stored for the signed-in user: every session, every
+  /// sample under it, and the profile document itself.
+  ///
+  /// Called by [AuthService.deleteAccount] while the account is still signed
+  /// in — the Firestore rules scope deletes to the owner, so this cannot run
+  /// once the auth user is gone. Throws [DataServiceException] if any part
+  /// fails, which leaves the account intact so the user can retry.
+  Future<void> deleteAccountData() async {
+    final firestore = _firestore;
+    final uid = _auth?.currentUser?.uid;
+    if (firestore == null || uid == null) return;
+
+    _deleting = true;
+    _setSyncing();
+
+    // Stop anything that could write, or re-create the profile, mid-delete.
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
+    _activeSessionId = null;
+    _trendSessionId = null;
+    // Clearing the id above stops new checkpoints; this lets one already in
+    // flight land first, so its merge-write cannot recreate a session document
+    // after we delete it. Bounded, because an offline commit never settles —
+    // if that happens the server reads below fail and the account stays intact.
+    await _checkpointFuture
+        ?.timeout(_deleteTimeout, onTimeout: () {})
+        .catchError((Object _) {});
+    await _profileSubscription?.cancel();
+    await _sessionsSubscription?.cancel();
+    await _trendSubscription?.cancel();
+    _profileSubscription = null;
+    _sessionsSubscription = null;
+    _trendSubscription = null;
+
+    final userReference = firestore.collection('users').doc(uid);
+    try {
+      await _deleteSessions(userReference);
+      await _run(userReference.delete());
+      _recentSessions = const [];
+      _trendPoints = const [];
+      _profile = CerebroProfile.fallback(null);
+      _setReady();
+    } on DataServiceException catch (error) {
+      _deleting = false;
+      _setError(error.message);
+      rethrow;
+    } on FirebaseException catch (error) {
+      _deleting = false;
+      final message = error.message ?? 'Could not delete your data.';
+      _setError(message);
+      throw DataServiceException(message);
+    }
+    // _deleting stays set until the auth user disappears and _bindUser resets
+    // it, so a token refresh mid-deletion cannot rebuild the profile document.
+  }
+
+  /// Pages through the user's sessions, clearing each one's samples before
+  /// deleting the session documents themselves.
+  Future<void> _deleteSessions(
+    DocumentReference<Map<String, dynamic>> userReference,
+  ) async {
+    final sessions = userReference.collection('sessions');
+    // Bounded so a cache that keeps serving deleted documents cannot spin here.
+    for (var page = 0; page < 500; page++) {
+      final snapshot = await _run(
+        sessions.limit(_deletePageSize).get(_serverFirst),
+      );
+      if (snapshot.docs.isEmpty) return;
+      for (final session in snapshot.docs) {
+        await _deleteSamples(session.reference);
+      }
+      await _deleteAll(snapshot.docs.map((document) => document.reference));
+      if (snapshot.docs.length < _deletePageSize) return;
+    }
+    throw const DataServiceException(
+      'There was more session data than one pass could delete. Try again.',
+    );
+  }
+
+  Future<void> _deleteSamples(
+    DocumentReference<Map<String, dynamic>> sessionReference,
+  ) async {
+    final samples = sessionReference.collection('samples');
+    for (var page = 0; page < 500; page++) {
+      final snapshot = await _run(
+        samples.limit(_deletePageSize).get(_serverFirst),
+      );
+      if (snapshot.docs.isEmpty) return;
+      await _deleteAll(snapshot.docs.map((document) => document.reference));
+      if (snapshot.docs.length < _deletePageSize) return;
+    }
+    throw const DataServiceException(
+      'There was more session data than one pass could delete. Try again.',
+    );
+  }
+
+  Future<void> _deleteAll(
+    Iterable<DocumentReference<Map<String, dynamic>>> references,
+  ) async {
+    final batch = _firestore!.batch();
+    for (final reference in references) {
+      batch.delete(reference);
+    }
+    await _run(batch.commit());
+  }
+
+  /// Fails fast instead of queueing offline, and never hangs forever.
+  Future<T> _run<T>(Future<T> operation) {
+    return operation.timeout(
+      _deleteTimeout,
+      onTimeout: () => throw const DataServiceException(
+        'Deleting your data timed out. Check your connection and try again — '
+        'anything already deleted stays deleted.',
+      ),
+    );
+  }
+
+  /// Reads straight from the server so a stale cache cannot hide documents
+  /// that still need deleting, and so an offline attempt errors immediately.
+  static final _serverFirst = GetOptions(source: Source.server);
+
   Future<void> _bindUser(User? user) async {
+    // Ignore auth events raised by the deletion itself — re-authenticating
+    // refreshes the token, and rebinding here would recreate the very profile
+    // document that is being erased.
+    if (_deleting && user != null) return;
+    _deleting = false;
     final generation = ++_bindingGeneration;
     await _profileSubscription?.cancel();
     await _sessionsSubscription?.cancel();
