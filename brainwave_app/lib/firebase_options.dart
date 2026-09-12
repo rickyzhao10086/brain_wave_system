@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -28,15 +25,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -56,7 +47,6 @@ class DefaultFirebaseOptions {
     projectId: 'cerebrosync-b79a9',
     storageBucket: 'cerebrosync-b79a9.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBIWgeH4OcZ0TzbSf-kXR9-LBmzsjqSfX8',
     appId: '1:424330738470:ios:1abde49762a5348d1e5fe7',
@@ -64,5 +54,33 @@ class DefaultFirebaseOptions {
     projectId: 'cerebrosync-b79a9',
     storageBucket: 'cerebrosync-b79a9.firebasestorage.app',
     iosBundleId: 'com.ricky.neuromotion',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAKXhQJddkfelmNzxVRN0gyah5zAKccmh4',
+    appId: '1:424330738470:web:e521a25a46ad34c91e5fe7',
+    messagingSenderId: '424330738470',
+    projectId: 'cerebrosync-b79a9',
+    authDomain: 'cerebrosync-b79a9.firebaseapp.com',
+    storageBucket: 'cerebrosync-b79a9.firebasestorage.app',
+    measurementId: 'G-1KMBZX6DG6',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyBIWgeH4OcZ0TzbSf-kXR9-LBmzsjqSfX8',
+    appId: '1:424330738470:ios:c43d378a602a19881e5fe7',
+    messagingSenderId: '424330738470',
+    projectId: 'cerebrosync-b79a9',
+    storageBucket: 'cerebrosync-b79a9.firebasestorage.app',
+    iosBundleId: 'com.example.brainwaveApp',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyAKXhQJddkfelmNzxVRN0gyah5zAKccmh4',
+    appId: '1:424330738470:web:71c42a1c9c26769e1e5fe7',
+    messagingSenderId: '424330738470',
+    projectId: 'cerebrosync-b79a9',
+    authDomain: 'cerebrosync-b79a9.firebaseapp.com',
+    storageBucket: 'cerebrosync-b79a9.firebasestorage.app',
+    measurementId: 'G-B4ZWV90TW4',
   );
 }

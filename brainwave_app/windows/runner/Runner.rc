@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "brainwave_app" "\0"
+            VALUE "CompanyName", "Coding Minds Academy" "\0"
+            VALUE "FileDescription", "CerebroSync desktop EEG session monitor" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "brainwave_app" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "brainwave_app.exe" "\0"
-            VALUE "ProductName", "brainwave_app" "\0"
+            VALUE "InternalName", "CerebroSync" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Coding Minds Academy. All rights reserved." "\0"
+            VALUE "OriginalFilename", "CerebroSync.exe" "\0"
+            VALUE "ProductName", "CerebroSync" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
