@@ -18,6 +18,9 @@ class AppLinks {
   /// Support page or contact form. Required by App Store Connect.
   static const String support = 'https://codingmind.com';
 
+  /// Product page for the Muse 2 headband required to use CerebroSync.
+  static const String muse2Product = 'https://choosemuse.com/products/muse-2';
+
   static bool get hasPrivacyPolicy => isConfigured(privacyPolicy);
   static bool get hasSupport => isConfigured(support);
 

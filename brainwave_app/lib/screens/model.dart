@@ -98,7 +98,7 @@ class _PipelineCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Muse 2 packets are decoded and summarized on this phone. EEG band power, electrode contact, PPG pulse, breathing pace, and IMU artifact features produce a non-clinical session readiness label without sending raw EEG to Firebase.',
+            'Muse 2 packets are decoded and summarized on this device. EEG band power, electrode contact, PPG pulse, breathing pace, and IMU artifact features produce a non-clinical session readiness label without sending raw EEG to Firebase.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,

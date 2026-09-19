@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config/app_links.dart';
 import '../services/auth_service.dart';
 import '../widgets/icon_badge.dart';
 import '../widgets/neuro_panel.dart';
@@ -33,6 +35,22 @@ class _LoginScreenState extends State<LoginScreen> {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showMuse2Requirement();
+    });
+  }
+
+  Future<void> _showMuse2Requirement() {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const _Muse2RequirementDialog(),
+    );
   }
 
   void _setMode(bool isLogin) {
@@ -264,6 +282,52 @@ class _Brand extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _Muse2RequirementDialog extends StatelessWidget {
+  const _Muse2RequirementDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.bluetooth_audio_rounded, color: Color(0xff22d3ee)),
+          SizedBox(width: 10),
+          Expanded(child: Text('Muse 2 required')),
+        ],
+      ),
+      content: const Text(
+        'CerebroSync needs a Muse 2 headband to connect and interact with the app. '
+        'Please make sure you have one before creating an account.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => _openMuse2Product(context),
+          child: const Text('Shop Muse 2'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Continue to login'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openMuse2Product(BuildContext context) async {
+    final opened = await launchUrl(
+      Uri.parse(AppLinks.muse2Product),
+      mode: LaunchMode.externalApplication,
+    ).catchError((Object _) => false);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the Muse 2 product page.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
 

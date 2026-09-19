@@ -399,7 +399,7 @@ class _SettingsCard extends StatelessWidget {
               subtitle: Text(
                 consentActive
                     ? 'Summary checkpoints sync once per minute.'
-                    : 'Muse processing stays on this phone.',
+                    : 'Muse processing stays on this device.',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: .5),
                   fontSize: 10,

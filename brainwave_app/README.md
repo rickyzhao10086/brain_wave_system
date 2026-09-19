@@ -5,6 +5,10 @@ connect directly to a Muse 2 over Bluetooth Low Energy and decode its sensor
 packets on the phone. Firebase Authentication manages email/password accounts,
 and Cloud Firestore stores profiles plus compact session checkpoints.
 
+Windows and macOS website releases are documented in
+[DESKTOP_RELEASE.md](DESKTOP_RELEASE.md). The desktop builds use the same
+direct Muse 2 BLE path and Firebase account/session flow as the mobile app.
+
 ## Firebase setup
 
 The checked-in FlutterFire configuration points Android and iOS at the Firebase

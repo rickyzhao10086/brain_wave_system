@@ -187,9 +187,9 @@ class _MuseSessionCard extends StatelessWidget {
           Text(
             service.isLive
                 ? service.source == MuseDataSource.directBle
-                      ? 'Connected directly to the headband. EEG, PPG, accelerometer, gyroscope, and telemetry packets are being decoded on this phone.'
+                      ? 'Connected directly to the headband. EEG, PPG, accelerometer, gyroscope, and telemetry packets are being decoded on this device.'
                       : 'Receiving Muse summaries from the local developer bridge.'
-                : 'Turn on your Muse 2, keep it close to the phone, then scan. Disconnect MuseLSL or the Muse app first because only one Bluetooth client can use the headband.',
+                : 'Turn on your Muse 2, keep it close to this device, then scan. Disconnect MuseLSL or the Muse app first because only one Bluetooth client can use the headband.',
             style: TextStyle(
               color: Colors.white.withValues(alpha: .62),
               fontSize: 12,
