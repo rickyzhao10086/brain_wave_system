@@ -9,11 +9,20 @@ void main() {
 
   testWidgets('shows the login screen on launch', (tester) async {
     await tester.pumpWidget(const CerebroSyncApp());
+    await tester.pump();
 
     expect(find.text('CerebroSync'), findsOneWidget);
+    expect(find.text('Muse 2 required'), findsOneWidget);
+    expect(
+      find.textContaining('Please make sure you have one'),
+      findsOneWidget,
+    );
     expect(find.byType(TextField), findsWidgets);
     // The dashboard is gated until the user authenticates.
     expect(find.text('Muse 2 Ready'), findsNothing);
+
+    await tester.pumpAndSettle();
+    expect(find.text('Muse 2 required'), findsNothing);
   });
 
   testWidgets('renders the dashboard once signed in', (tester) async {
