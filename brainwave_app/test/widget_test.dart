@@ -21,6 +21,7 @@ void main() {
     // The dashboard is gated until the user authenticates.
     expect(find.text('Muse 2 Ready'), findsNothing);
 
+    await tester.tap(find.text('Continue to login'));
     await tester.pumpAndSettle();
     expect(find.text('Muse 2 required'), findsNothing);
   });
