@@ -39,6 +39,22 @@ class MuseSignalProcessor {
     (_) => ListQueue<double>(),
   );
   final ListQueue<double> _infraredPpg = ListQueue<double>();
+  final ListQueue<Map<String, double>> _bandHistory = ListQueue();
+  int _analysisWindowSeconds = 30;
+  int _eegSampleCount = 0;
+  int _lastAnalyzedEegSampleCount = 0;
+
+  int get analysisWindowSeconds => _analysisWindowSeconds;
+
+  set analysisWindowSeconds(int seconds) {
+    if (seconds != 15 && seconds != 30 && seconds != 60) {
+      throw ArgumentError.value(seconds, 'seconds', 'Use 15, 30, or 60');
+    }
+    _analysisWindowSeconds = seconds;
+    while (_bandHistory.length > seconds) {
+      _bandHistory.removeFirst();
+    }
+  }
 
   DateTime? _lastEeg;
   DateTime? _lastPpg;
@@ -53,6 +69,9 @@ class MuseSignalProcessor {
       channel.clear();
     }
     _infraredPpg.clear();
+    _bandHistory.clear();
+    _eegSampleCount = 0;
+    _lastAnalyzedEegSampleCount = 0;
     _lastEeg = null;
     _lastPpg = null;
     _lastAcc = null;
@@ -65,6 +84,7 @@ class MuseSignalProcessor {
   void addEeg(int channel, MuseEegPacket packet) {
     if (channel < 0 || channel >= _eeg.length) return;
     _append(_eeg[channel], packet.samples, eegSampleRate * 2);
+    if (channel == 0) _eegSampleCount += packet.samples.length;
     _lastEeg = DateTime.now();
   }
 
@@ -107,7 +127,18 @@ class MuseSignalProcessor {
 
   MuseBleMetrics buildMetrics() {
     final now = DateTime.now();
-    final bands = _relativeBandPower();
+    final eegLive = _isRecent(_lastEeg, now);
+    if (!eegLive) {
+      _bandHistory.clear();
+    } else if (_eegSampleCount > _lastAnalyzedEegSampleCount &&
+        _eeg.every((channel) => channel.length >= eegSampleRate)) {
+      _bandHistory.addLast(_relativeBandPower());
+      _lastAnalyzedEegSampleCount = _eegSampleCount;
+      while (_bandHistory.length > _analysisWindowSeconds) {
+        _bandHistory.removeFirst();
+      }
+    }
+    final bands = _averagedBandPower();
     return MuseBleMetrics(
       contact: {
         for (var i = 0; i < channelNames.length; i++)
@@ -118,7 +149,7 @@ class MuseSignalProcessor {
       motionG: _motionG,
       gyroDps: _gyroDps,
       batteryPercent: _batteryPercent,
-      eegLive: _isRecent(_lastEeg, now),
+      eegLive: eegLive,
       ppgLive: _isRecent(_lastPpg, now),
       accLive: _isRecent(_lastAcc, now),
       gyroLive: _isRecent(_lastGyro, now),
@@ -203,6 +234,19 @@ class MuseSignalProcessor {
     final total = raw.values.fold<double>(0, (sum, value) => sum + value);
     if (total <= 0) return raw;
     return raw.map((name, value) => MapEntry(name, value / total));
+  }
+
+  Map<String, double> _averagedBandPower() {
+    const names = ['delta', 'theta', 'alpha', 'beta', 'gamma'];
+    if (_bandHistory.isEmpty) {
+      return {for (final name in names) name: 0};
+    }
+    return {
+      for (final name in names)
+        name:
+            _bandHistory.fold<double>(0, (sum, bands) => sum + bands[name]!) /
+            _bandHistory.length,
+    };
   }
 
   int? _estimateHeartRate() {

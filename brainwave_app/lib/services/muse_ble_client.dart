@@ -49,6 +49,10 @@ class MuseBleClient {
   String? get deviceName => _device?.name;
   bool get isConnected => _device != null && !_disconnecting;
 
+  set analysisWindowSeconds(int seconds) {
+    _processor.analysisWindowSeconds = seconds;
+  }
+
   Future<void> connect({
     String namePrefix = 'Muse',
     void Function()? onDeviceFound,
@@ -300,11 +304,13 @@ class MuseBleClient {
 
   static Future<AvailabilityState> _waitForBluetooth() async {
     var state = await UniversalBle.getBluetoothAvailabilityState();
-    for (var attempt = 0;
-        attempt < 8 &&
-            (state == AvailabilityState.unknown ||
-                state == AvailabilityState.resetting);
-        attempt++) {
+    for (
+      var attempt = 0;
+      attempt < 8 &&
+          (state == AvailabilityState.unknown ||
+              state == AvailabilityState.resetting);
+      attempt++
+    ) {
       await Future<void>.delayed(const Duration(milliseconds: 350));
       state = await UniversalBle.getBluetoothAvailabilityState();
     }

@@ -32,11 +32,16 @@ firebase deploy --only firestore:rules,firestore:indexes
    password reset sender names and messages for CerebroSync.
 
 No Cloud Functions or Cloud Storage setup is required. Raw EEG stays on the
-phone. While cloud recording is enabled, each active session stores one compact
+phone. Cloud session recording starts off and can be enabled in Profile. While
+cloud recording is enabled, each active session stores one compact
 sample and updates its session summary once per minute, plus start/end and
 profile writes. That is about 120 writes per streaming hour, which is designed
 to remain practical under the Spark plan's daily Firestore allowance during
 development.
+
+The 15, 30, or 60 second EEG analysis window averages recent band power for a
+direct Muse connection. It does not change the one-minute cloud checkpoint
+interval.
 
 Firestore paths:
 

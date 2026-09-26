@@ -44,7 +44,7 @@ class CerebroProfile {
       uid: user?.uid ?? '',
       displayName: user?.displayLabel ?? 'CerebroSync user',
       email: user?.email ?? '',
-      consentActive: true,
+      consentActive: false,
       careMode: 'Care',
       sessionWindowSeconds: 30,
       sessionNote: '',
@@ -57,7 +57,7 @@ class CerebroProfile {
       uid: uid,
       displayName: _string(data['displayName'], fallback: 'CerebroSync user'),
       email: _string(data['email']),
-      consentActive: data['consentActive'] != false,
+      consentActive: data['consentActive'] == true,
       careMode: _string(data['careMode'], fallback: 'Care'),
       sessionWindowSeconds: _integer(
         data['sessionWindowSeconds'],
@@ -116,6 +116,7 @@ class FirebaseDataService extends ChangeNotifier {
   static final FirebaseDataService instance = FirebaseDataService._();
 
   static const checkpointInterval = Duration(minutes: 1);
+  static const _sessionEndTimeout = Duration(seconds: 30);
 
   /// Documents read per page while erasing an account. Well under the 500-write
   /// batch ceiling so a page of samples always fits in one commit.
@@ -134,6 +135,7 @@ class FirebaseDataService extends ChangeNotifier {
   _sessionsSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _trendSubscription;
   Timer? _checkpointTimer;
+  Timer? _sessionEndRetryTimer;
 
   CerebroProfile _profile = CerebroProfile.fallback(null);
   List<SessionSummary> _recentSessions = const [];
@@ -148,6 +150,7 @@ class FirebaseDataService extends ChangeNotifier {
   bool _deleting = false;
   bool _checkpointInFlight = false;
   Future<void>? _checkpointFuture;
+  Future<void>? _sessionEndFuture;
   int _bindingGeneration = 0;
   MuseSnapshot? _lastLiveSnapshot;
 
@@ -199,6 +202,7 @@ class FirebaseDataService extends ChangeNotifier {
         'sessionNote': sessionNote.trim(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
+      MuseLiveService.instance.setAnalysisWindow(sessionWindowSeconds);
       if (!consentActive) {
         await endActiveSession();
       } else if (MuseLiveService.instance.isLive) {
@@ -211,17 +215,51 @@ class FirebaseDataService extends ChangeNotifier {
     }
   }
 
-  Future<void> endActiveSession() async {
+  Future<void> endActiveSession() {
     _checkpointTimer?.cancel();
     _checkpointTimer = null;
+    return _sessionEndFuture ??= _finishActiveSession().whenComplete(() {
+      _sessionEndFuture = null;
+    });
+  }
+
+  Future<void> _finishActiveSession() async {
     final sessionId = _activeSessionId;
     if (sessionId == null) return;
 
-    await _writeCheckpoint(complete: true);
+    try {
+      await _writeCheckpoint(complete: true).timeout(_sessionEndTimeout);
+    } on TimeoutException {
+      const message =
+          'Ending the cloud session timed out. Check your connection and retry.';
+      _setError(message);
+      _scheduleSessionEndRetry();
+      throw const DataServiceException(message);
+    } on DataServiceException {
+      _scheduleSessionEndRetry();
+      rethrow;
+    }
     if (_activeSessionId == sessionId) {
       _activeSessionId = null;
+      _sessionEndRetryTimer?.cancel();
+      _sessionEndRetryTimer = null;
       notifyListeners();
     }
+  }
+
+  Future<void> _endSessionInBackground() async {
+    try {
+      await endActiveSession();
+    } on DataServiceException {
+      // The service exposes the error and retries while this user is signed in.
+    }
+  }
+
+  void _scheduleSessionEndRetry() {
+    _sessionEndRetryTimer?.cancel();
+    _sessionEndRetryTimer = Timer(checkpointInterval, () {
+      unawaited(_endSessionInBackground());
+    });
   }
 
   /// Erases everything stored for the signed-in user: every session, every
@@ -242,6 +280,8 @@ class FirebaseDataService extends ChangeNotifier {
     // Stop anything that could write, or re-create the profile, mid-delete.
     _checkpointTimer?.cancel();
     _checkpointTimer = null;
+    _sessionEndRetryTimer?.cancel();
+    _sessionEndRetryTimer = null;
     _activeSessionId = null;
     _trendSessionId = null;
     // Clearing the id above stops new checkpoints; this lets one already in
@@ -360,12 +400,15 @@ class FirebaseDataService extends ChangeNotifier {
     _trendSubscription = null;
     _checkpointTimer?.cancel();
     _checkpointTimer = null;
+    _sessionEndRetryTimer?.cancel();
+    _sessionEndRetryTimer = null;
     _activeSessionId = null;
     _trendSessionId = null;
     _boundUid = user?.uid;
     _recentSessions = const [];
     _trendPoints = const [];
     _profile = CerebroProfile.fallback(AuthService.instance.currentUser);
+    MuseLiveService.instance.setAnalysisWindow(_profile.sessionWindowSeconds);
 
     if (user == null || user.isAnonymous || _firestore == null) {
       notifyListeners();
@@ -385,7 +428,7 @@ class FirebaseDataService extends ChangeNotifier {
               ? user.displayName!.trim()
               : _emailLabel(user.email),
           'isAnonymous': false,
-          'consentActive': true,
+          'consentActive': false,
           'careMode': 'Care',
           'sessionWindowSeconds': 30,
           'sessionNote': '',
@@ -407,9 +450,12 @@ class FirebaseDataService extends ChangeNotifier {
         final data = document.data();
         if (data == null) return;
         _profile = CerebroProfile.fromMap(document.id, data);
-        _setReady();
+        MuseLiveService.instance.setAnalysisWindow(
+          _profile.sessionWindowSeconds,
+        );
+        if (_sessionEndRetryTimer == null) _setReady();
         if (!_profile.consentActive) {
-          unawaited(endActiveSession());
+          unawaited(_endSessionInBackground());
         } else if (MuseLiveService.instance.isLive) {
           unawaited(_startSession());
         }
@@ -487,7 +533,7 @@ class FirebaseDataService extends ChangeNotifier {
     if (isLive && !_wasMuseLive) {
       unawaited(_startSession());
     } else if (!isLive && _wasMuseLive) {
-      unawaited(endActiveSession());
+      unawaited(_endSessionInBackground());
     }
     _wasMuseLive = isLive;
   }
@@ -556,6 +602,8 @@ class FirebaseDataService extends ChangeNotifier {
       notifyListeners();
     } on FirebaseException catch (error) {
       _setError(error.message ?? 'Could not start session sync.');
+    } on DataServiceException catch (error) {
+      _setError(error.message);
     } finally {
       _startingSession = false;
     }
@@ -579,6 +627,11 @@ class FirebaseDataService extends ChangeNotifier {
         uid == null ||
         sessionId == null ||
         snapshot == null) {
+      if (complete && sessionId != null) {
+        const message = 'Could not end the cloud session. Retry when online.';
+        _setError(message);
+        throw const DataServiceException(message);
+      }
       return;
     }
 
@@ -617,11 +670,27 @@ class FirebaseDataService extends ChangeNotifier {
 
     try {
       await batch.commit();
+      if (complete && _activeSessionId == sessionId) {
+        _activeSessionId = null;
+        _sessionEndRetryTimer?.cancel();
+        _sessionEndRetryTimer = null;
+      }
       _lastError = null;
       _status = FirebaseSyncStatus.ready;
       notifyListeners();
     } on FirebaseException catch (error) {
       _setError(error.message ?? 'Session checkpoint failed.');
+      if (complete) {
+        throw DataServiceException(
+          error.message ??
+              'Could not end the cloud session. Retry when online.',
+        );
+      }
+    } catch (error) {
+      _setError('Session checkpoint failed: $error');
+      if (complete) {
+        throw DataServiceException('Could not end the cloud session: $error');
+      }
     } finally {
       _checkpointInFlight = false;
       _checkpointFuture = null;

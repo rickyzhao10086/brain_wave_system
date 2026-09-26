@@ -40,4 +40,29 @@ void main() {
     expect(metrics.ppgLive, isTrue);
     expect(metrics.heartRate, closeTo(72, 2));
   });
+
+  test('analysis window changes which recent EEG spectra are averaged', () {
+    final processor = MuseSignalProcessor()..analysisWindowSeconds = 60;
+    var sampleIndex = 0;
+    for (var second = 0; second < 16; second++) {
+      final frequency = second == 0 ? 10 : 20;
+      for (var packet = 0; packet < 22; packet++) {
+        final samples = List<double>.generate(12, (_) {
+          final sample = sampleIndex++;
+          return 50 * math.sin(2 * math.pi * frequency * sample / 256);
+        });
+        for (var channel = 0; channel < 4; channel++) {
+          processor.addEeg(channel, MuseEegPacket(packet, samples));
+        }
+      }
+      processor.buildMetrics();
+    }
+
+    final longWindowAlpha = processor.buildMetrics().bands['alpha']!;
+    processor.analysisWindowSeconds = 15;
+    final shortWindowAlpha = processor.buildMetrics().bands['alpha']!;
+
+    expect(longWindowAlpha, greaterThan(shortWindowAlpha));
+    expect(processor.analysisWindowSeconds, 15);
+  });
 }

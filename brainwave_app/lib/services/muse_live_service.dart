@@ -30,6 +30,7 @@ class MuseLiveService extends ChangeNotifier {
   String _url = defaultUrl;
   String? _errorMessage;
   int _connectionGeneration = 0;
+  int _analysisWindowSeconds = 30;
 
   MuseConnectionStatus get status => _status;
   MuseSnapshot get snapshot => _snapshot;
@@ -45,6 +46,12 @@ class MuseLiveService extends ChangeNotifier {
   };
 
   bool get isLive => _status == MuseConnectionStatus.live && _snapshot.isLive;
+
+  void setAnalysisWindow(int seconds) {
+    if (_analysisWindowSeconds == seconds) return;
+    _analysisWindowSeconds = seconds;
+    _bleClient?.analysisWindowSeconds = seconds;
+  }
 
   Future<void> connectDirect({String namePrefix = 'Muse'}) async {
     if (_isBusy || _status == MuseConnectionStatus.live) {
@@ -65,6 +72,7 @@ class MuseLiveService extends ChangeNotifier {
         notifyListeners();
       },
     );
+    client.analysisWindowSeconds = _analysisWindowSeconds;
     _bleClient = client;
 
     try {
@@ -140,7 +148,10 @@ class MuseLiveService extends ChangeNotifier {
     try {
       final json = jsonDecode(message);
       if (json is! Map<String, dynamic>) return;
-      _snapshot = MuseSnapshot.fromJson(json);
+      final incoming = MuseSnapshot.fromJson(json);
+      _snapshot = incoming.isLive
+          ? incoming
+          : MuseSnapshot.offline(source: 'bridge');
       _source = MuseDataSource.bridge;
       _setStatus(
         _snapshot.isLive
@@ -204,7 +215,7 @@ class MuseLiveService extends ChangeNotifier {
   }
 
   void _goBleOffline() {
-    _snapshot = _snapshot.copyWith(connected: false);
+    _snapshot = MuseSnapshot.offline(source: 'ble');
     _setStatus(MuseConnectionStatus.offline);
   }
 
@@ -212,6 +223,7 @@ class MuseLiveService extends ChangeNotifier {
     _subscription?.cancel();
     _subscription = null;
     _socket = null;
+    _snapshot = MuseSnapshot.offline(source: 'bridge');
     _setStatus(MuseConnectionStatus.offline);
   }
 
@@ -320,6 +332,35 @@ class MuseSnapshot {
         gyroDps: 1.2,
       ),
       streams: MuseStreams(eeg: false, ppg: false, acc: false, gyro: false),
+    );
+  }
+
+  factory MuseSnapshot.offline({required String source}) {
+    return MuseSnapshot(
+      source: source,
+      connected: false,
+      sampleRate: null,
+      batteryPercent: null,
+      state: const MuseState(
+        label: 'Waiting',
+        confidence: 0,
+        artifact: 'Waiting',
+      ),
+      contact: const {'TP9': 0, 'AF7': 0, 'AF8': 0, 'TP10': 0},
+      bands: const MuseBands(delta: 0, theta: 0, alpha: 0, beta: 0, gamma: 0),
+      body: const MuseBodySignals(
+        ppg: 'Waiting',
+        heartRate: null,
+        breathRate: null,
+        motionG: 0,
+        gyroDps: 0,
+      ),
+      streams: const MuseStreams(
+        eeg: false,
+        ppg: false,
+        acc: false,
+        gyro: false,
+      ),
     );
   }
 

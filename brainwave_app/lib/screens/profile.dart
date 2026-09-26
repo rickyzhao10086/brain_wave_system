@@ -21,7 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _notes = TextEditingController();
   String _careMode = 'Care';
   int _sessionWindowSeconds = 30;
-  bool _consentActive = true;
+  bool _consentActive = false;
   bool _saving = false;
   bool _dirty = false;
   String? _loadedSignature;
@@ -146,6 +146,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showMessage('Profile and recording preferences saved.');
     } on AuthServiceException catch (error) {
       _showMessage(error.message);
+    } on DataServiceException catch (error) {
+      _showMessage(error.message);
     } catch (_) {
       _showMessage(
         'Could not save your profile. Check Firebase rules and retry.',
@@ -209,7 +211,16 @@ class _ProfileHeader extends StatelessWidget {
           color: consent ? const Color(0xff22c55e) : const Color(0xfff59e0b),
         ),
         IconButton(
-          onPressed: AuthService.instance.signOut,
+          onPressed: () async {
+            try {
+              await AuthService.instance.signOut();
+            } on DataServiceException catch (error) {
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(error.message)));
+            }
+          },
           tooltip: 'Sign out',
           icon: Icon(
             Icons.logout_rounded,
@@ -364,7 +375,10 @@ class _SettingsCard extends StatelessWidget {
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
             initialValue: sessionWindowSeconds,
-            decoration: _decoration('Analysis window', Icons.timelapse_rounded),
+            decoration: _decoration(
+              'EEG analysis window',
+              Icons.timelapse_rounded,
+            ),
             items: const [
               DropdownMenuItem(value: 15, child: Text('15 seconds')),
               DropdownMenuItem(value: 30, child: Text('30 seconds')),
@@ -375,6 +389,13 @@ class _SettingsCard extends StatelessWidget {
                 : (value) {
                     if (value != null) onWindowChanged(value);
                   },
+          ),
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Averages recent EEG band power from a direct Muse connection.',
+              style: TextStyle(color: Colors.white54, fontSize: 10),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(

@@ -113,7 +113,11 @@ class _AnalysisHeader extends StatelessWidget {
           ),
         ),
         StatusPill(
-          isLive ? sourceLabel : 'Mock',
+          isLive
+              ? sourceLabel
+              : sourceLabel == 'Mock'
+              ? 'Mock'
+              : 'Offline',
           color: isLive ? const Color(0xff22c55e) : const Color(0xfff59e0b),
         ),
       ],
@@ -668,7 +672,11 @@ class _InterpretationCard extends StatelessWidget {
                 ),
               ),
               StatusPill(
-                isLive ? sourceLabel : 'Mock',
+                isLive
+                    ? sourceLabel
+                    : sourceLabel == 'Mock'
+                    ? 'Mock'
+                    : 'Offline',
                 color: isLive
                     ? const Color(0xff22c55e)
                     : const Color(0xfff59e0b),
@@ -690,6 +698,9 @@ class _InterpretationCard extends StatelessWidget {
   }
 
   static String _summaryText(MuseSnapshot snapshot, bool isLive) {
+    if (!isLive && snapshot.source != 'mock') {
+      return 'Muse is offline. Reconnect to see a current reading.';
+    }
     final source = isLive
         ? 'The live Muse stream reports'
         : 'The mock preview shows';
