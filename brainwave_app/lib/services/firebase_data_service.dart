@@ -150,6 +150,7 @@ class FirebaseDataService extends ChangeNotifier {
   bool _deleting = false;
   bool _checkpointInFlight = false;
   Future<void>? _checkpointFuture;
+  Future<void>? _sessionStartFuture;
   Future<void>? _sessionEndFuture;
   int _bindingGeneration = 0;
   MuseSnapshot? _lastLiveSnapshot;
@@ -173,7 +174,13 @@ class FirebaseDataService extends ChangeNotifier {
     _status = FirebaseSyncStatus.ready;
 
     MuseLiveService.instance.addListener(_handleMuseChange);
-    AuthService.instance.registerBeforeSignOut(endActiveSession);
+    AuthService.instance.registerBeforeSignOut(() async {
+      try {
+        await endActiveSession();
+      } finally {
+        await MuseLiveService.instance.disconnect();
+      }
+    });
     AuthService.instance.registerDeleteAccountData(deleteAccountData);
     _auth!.userChanges().listen((user) {
       unawaited(_bindUser(user));
@@ -284,13 +291,37 @@ class FirebaseDataService extends ChangeNotifier {
     _sessionEndRetryTimer = null;
     _activeSessionId = null;
     _trendSessionId = null;
+    try {
+      // A session may have started just before deletion began. Stop new Muse
+      // events first, then wait for that start to finish before paging the
+      // user's sessions so it cannot create a document after the delete pass.
+      await MuseLiveService.instance.disconnect();
+      await _sessionStartFuture?.timeout(
+        _deleteTimeout,
+        onTimeout: () => throw const DataServiceException(
+          'A session is still starting. Wait a moment and retry account deletion.',
+        ),
+      );
+      await _checkpointFuture?.timeout(
+        _deleteTimeout,
+        onTimeout: () => throw const DataServiceException(
+          'A cloud write is still finishing. Wait a moment and retry account deletion.',
+        ),
+      );
+    } on DataServiceException catch (error) {
+      _deleting = false;
+      _setError(error.message);
+      rethrow;
+    } catch (error) {
+      _deleting = false;
+      final message = 'Could not stop the active Muse session: $error';
+      _setError(message);
+      throw DataServiceException(message);
+    }
     // Clearing the id above stops new checkpoints; this lets one already in
     // flight land first, so its merge-write cannot recreate a session document
     // after we delete it. Bounded, because an offline commit never settles —
-    // if that happens the server reads below fail and the account stays intact.
-    await _checkpointFuture
-        ?.timeout(_deleteTimeout, onTimeout: () {})
-        .catchError((Object _) {});
+    // a timeout keeps the account intact so deletion can be retried safely.
     await _profileSubscription?.cancel();
     await _sessionsSubscription?.cancel();
     await _trendSubscription?.cancel();
@@ -390,6 +421,13 @@ class FirebaseDataService extends ChangeNotifier {
     // refreshes the token, and rebinding here would recreate the very profile
     // document that is being erased.
     if (_deleting && user != null) return;
+    // userChanges also fires for same-account profile updates and token
+    // refreshes. Keep the live session and its checkpoint timer bound in that
+    // case; only a real account switch needs a full rebind.
+    if (_boundUid == user?.uid &&
+        (user == null || _profileSubscription != null)) {
+      return;
+    }
     _deleting = false;
     final generation = ++_bindingGeneration;
     await _profileSubscription?.cancel();
@@ -538,18 +576,36 @@ class FirebaseDataService extends ChangeNotifier {
     _wasMuseLive = isLive;
   }
 
-  Future<void> _startSession() async {
-    if (_startingSession ||
+  Future<void> _startSession() {
+    if (_startingSession) {
+      return _sessionStartFuture ?? Future<void>.value();
+    }
+    if (_deleting ||
         _activeSessionId != null ||
         !_profile.consentActive ||
         !MuseLiveService.instance.isLive) {
-      return;
+      return Future<void>.value();
     }
     final user = _auth?.currentUser;
     final firestore = _firestore;
-    if (user == null || user.isAnonymous || firestore == null) return;
+    if (user == null || user.isAnonymous || firestore == null) {
+      return Future<void>.value();
+    }
 
     _startingSession = true;
+    final future = _createSession(user, firestore);
+    late final Future<void> trackedFuture;
+    trackedFuture = future.whenComplete(() {
+      _startingSession = false;
+      if (identical(_sessionStartFuture, trackedFuture)) {
+        _sessionStartFuture = null;
+      }
+    });
+    _sessionStartFuture = trackedFuture;
+    return trackedFuture;
+  }
+
+  Future<void> _createSession(User user, FirebaseFirestore firestore) async {
     _setSyncing();
     final sessionReference = firestore
         .collection('users')
@@ -574,17 +630,20 @@ class FirebaseDataService extends ChangeNotifier {
         'startedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+      if (_deleting) return;
       await firestore.collection('users').doc(user.uid).set({
         'preferredDeviceName': muse.deviceName ?? 'Muse 2',
         'lastDeviceAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      if (_auth?.currentUser?.uid != user.uid) {
-        await sessionReference.set({
-          'status': 'complete',
-          'endedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+      if (_deleting || _auth?.currentUser?.uid != user.uid) {
+        if (!_deleting) {
+          await sessionReference.set({
+            'status': 'complete',
+            'endedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
         return;
       }
       _activeSessionId = sessionReference.id;
@@ -604,8 +663,6 @@ class FirebaseDataService extends ChangeNotifier {
       _setError(error.message ?? 'Could not start session sync.');
     } on DataServiceException catch (error) {
       _setError(error.message);
-    } finally {
-      _startingSession = false;
     }
   }
 

@@ -11,8 +11,8 @@ import '../widgets/section_title.dart';
 import '../widgets/status_pill.dart';
 
 /// Analysis surfaces the Muse 2 evidence behind the session state: EEG band
-/// power, contact quality, motion artifacts, PPG, breathing pace, and the
-/// model's non-clinical interpretation.
+/// power, contact quality, motion artifacts, PPG, and the model's
+/// non-clinical interpretation.
 class AnalysisScreen extends StatelessWidget {
   const AnalysisScreen({super.key});
 
@@ -356,9 +356,9 @@ class _MuseBodySignalsCard extends StatelessWidget {
             value: body.breathRate == null
                 ? '-- rpm'
                 : '${body.breathRate} rpm',
-            detail: snapshot.streams.acc
-                ? 'Motion-derived estimate'
-                : 'Waiting for ACC',
+            detail: body.breathRate == null
+                ? 'Estimator unavailable'
+                : 'Motion-derived estimate',
             color: const Color(0xff22d3ee),
           ),
           const SizedBox(height: 12),

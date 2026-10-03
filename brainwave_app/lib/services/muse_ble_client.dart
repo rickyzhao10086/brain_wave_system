@@ -57,21 +57,33 @@ class MuseBleClient {
     String namePrefix = 'Muse',
     void Function()? onDeviceFound,
   }) async {
-    await disconnect();
+    if (_device != null || _scanCompleter != null) {
+      throw StateError('Disconnect the current Muse before reconnecting.');
+    }
     _disconnecting = false;
     _processor.reset();
 
     await UniversalBle.requestPermissions(withAndroidFineLocation: false);
+    if (_disconnecting) return;
     final availability = await _waitForBluetooth();
+    if (_disconnecting) return;
     if (availability != AvailabilityState.poweredOn) {
       throw StateError(_availabilityMessage(availability));
     }
 
     final device = await _scanForMuse(namePrefix);
+    if (_disconnecting) return;
     onDeviceFound?.call();
     _device = device;
     await device.connect(timeout: const Duration(seconds: 20));
-    if (_disconnecting) return;
+    if (_disconnecting) {
+      try {
+        await device.disconnect(timeout: const Duration(seconds: 5));
+      } catch (_) {
+        // A cancel can race the platform's connect completion.
+      }
+      return;
+    }
 
     _connectionSubscription = device.connectionStream.listen((connected) {
       if (!connected && !_disconnecting) {
@@ -82,6 +94,7 @@ class MuseBleClient {
     final services = await device.discoverServices(
       timeout: const Duration(seconds: 15),
     );
+    if (_disconnecting) return;
     final characteristics = <String, BleCharacteristic>{};
     for (final service in services) {
       for (final characteristic in service.characteristics) {
@@ -91,6 +104,7 @@ class MuseBleClient {
 
     _control = _requiredCharacteristic(characteristics, _controlUuid);
     await _subscribe(_control!, (_) {});
+    if (_disconnecting) return;
 
     for (var channel = 0; channel < _eegUuids.length; channel++) {
       final characteristic = _requiredCharacteristic(
@@ -104,6 +118,7 @@ class MuseBleClient {
           onError(error.message);
         }
       });
+      if (_disconnecting) return;
     }
 
     await _subscribeIfPresent(characteristics, _accelerometerUuid, (packet) {
@@ -111,19 +126,25 @@ class MuseBleClient {
         MusePacketDecoder.decodeAccelerometer(packet),
       );
     });
+    if (_disconnecting) return;
     await _subscribeIfPresent(characteristics, _gyroUuid, (packet) {
       _processor.addGyroscope(MusePacketDecoder.decodeGyroscope(packet));
     });
+    if (_disconnecting) return;
     await _subscribeIfPresent(characteristics, _telemetryUuid, (packet) {
       _processor.addTelemetry(MusePacketDecoder.decodeTelemetry(packet));
     });
+    if (_disconnecting) return;
     for (var channel = 0; channel < _ppgUuids.length; channel++) {
       await _subscribeIfPresent(characteristics, _ppgUuids[channel], (packet) {
         _processor.addPpg(channel, MusePacketDecoder.decodePpg(packet));
       });
+      if (_disconnecting) return;
     }
 
+    if (_disconnecting) return;
     await _writeCommand('d');
+    if (_disconnecting) return;
     _metricsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       onMetrics(_processor.buildMetrics());
     });
@@ -262,15 +283,29 @@ class MuseBleClient {
     BleCharacteristic characteristic,
     void Function(Uint8List packet) onPacket,
   ) async {
+    if (_disconnecting) {
+      throw StateError('Muse connection was cancelled.');
+    }
     if (!characteristic.notifications.isSupported) {
       throw StateError(
         'Muse characteristic ${characteristic.uuid} is not notifiable.',
       );
     }
-    _valueSubscriptions.add(characteristic.onValueReceived.listen(onPacket));
+    final valueSubscription = characteristic.onValueReceived.listen(onPacket);
+    _valueSubscriptions.add(valueSubscription);
     await characteristic.notifications.subscribe(
       timeout: const Duration(seconds: 8),
     );
+    if (_disconnecting) {
+      await valueSubscription.cancel();
+      _valueSubscriptions.remove(valueSubscription);
+      try {
+        await characteristic.unsubscribe(timeout: const Duration(seconds: 2));
+      } catch (_) {
+        // The concurrent disconnect may already have stopped notifications.
+      }
+      throw StateError('Muse connection was cancelled.');
+    }
     _notifyingCharacteristics.add(characteristic);
   }
 

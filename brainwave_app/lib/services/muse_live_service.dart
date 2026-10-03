@@ -27,6 +27,7 @@ class MuseLiveService extends ChangeNotifier {
   WebSocket? _socket;
   StreamSubscription<dynamic>? _subscription;
   MuseBleClient? _bleClient;
+  Timer? _eegStallTimer;
   String _url = defaultUrl;
   String? _errorMessage;
   int _connectionGeneration = 0;
@@ -65,8 +66,10 @@ class MuseLiveService extends ChangeNotifier {
     _errorMessage = null;
     _setStatus(MuseConnectionStatus.scanning);
     final client = MuseBleClient(
-      onMetrics: _handleBleMetrics,
-      onDisconnected: _goBleOffline,
+      onMetrics: (metrics) => _handleBleMetrics(metrics, generation),
+      onDisconnected: () {
+        if (generation == _connectionGeneration) _goBleOffline();
+      },
       onError: (message) {
         _errorMessage = message;
         notifyListeners();
@@ -110,6 +113,10 @@ class MuseLiveService extends ChangeNotifier {
       final socket = await WebSocket.connect(
         url,
       ).timeout(const Duration(seconds: 3));
+      if (generation != _connectionGeneration) {
+        await socket.close();
+        return;
+      }
       _socket = socket;
       _subscription = socket.listen(
         _handleMessage,
@@ -134,6 +141,8 @@ class MuseLiveService extends ChangeNotifier {
   }
 
   Future<void> _disconnectTransports() async {
+    _eegStallTimer?.cancel();
+    _eegStallTimer = null;
     await _subscription?.cancel();
     _subscription = null;
     await _socket?.close();
@@ -163,7 +172,29 @@ class MuseLiveService extends ChangeNotifier {
     }
   }
 
-  void _handleBleMetrics(MuseBleMetrics metrics) {
+  void _handleBleMetrics(MuseBleMetrics metrics, int generation) {
+    if (generation != _connectionGeneration ||
+        _source != MuseDataSource.directBle) {
+      return;
+    }
+    if (metrics.eegLive) {
+      _eegStallTimer?.cancel();
+      _eegStallTimer = null;
+    } else {
+      _eegStallTimer ??= Timer(const Duration(seconds: 15), () {
+        if (generation != _connectionGeneration ||
+            _source != MuseDataSource.directBle ||
+            _status == MuseConnectionStatus.offline) {
+          return;
+        }
+        _errorMessage =
+            'Muse connected, but EEG data is not arriving. Check the headband and retry.';
+        final client = _bleClient;
+        _goBleOffline();
+        unawaited(client?.disconnect());
+      });
+    }
+
     final contact = metrics.contact;
     final minimumContact = contact.values.fold<double>(
       1,
@@ -215,6 +246,8 @@ class MuseLiveService extends ChangeNotifier {
   }
 
   void _goBleOffline() {
+    _eegStallTimer?.cancel();
+    _eegStallTimer = null;
     _snapshot = MuseSnapshot.offline(source: 'ble');
     _setStatus(MuseConnectionStatus.offline);
   }

@@ -174,16 +174,13 @@ class MuseSummary:
         return float(np.nanmean(np.linalg.norm(gyro[:, :3], axis=1)))
 
     def _heart_rate(self) -> int | None:
-        if not self.ppg.live:
-            return None
-        # Real HR extraction needs filtering/peak validation; expose presence for now.
-        return 72
+        # A live PPG waveform is not itself a heart-rate measurement. Keep the
+        # value unavailable until peak detection and validation are implemented.
+        return None
 
     def _breath_rate(self) -> int | None:
-        if not self.acc.live:
-            return None
-        # Breath extraction will be modelled after a longer validated window.
-        return 15
+        # ACC availability alone cannot produce a breathing-rate estimate.
+        return None
 
 
 async def websocket_handshake(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> bool:

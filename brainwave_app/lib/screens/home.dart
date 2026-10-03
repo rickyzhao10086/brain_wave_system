@@ -234,14 +234,14 @@ class _MuseSessionCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: _isBusy(service.status)
-                  ? null
-                  : service.isLive
+              onPressed: service.isLive || _isBusy(service.status)
                   ? service.disconnect
                   : service.connectDirect,
               icon: Icon(
                 service.isLive
                     ? Icons.bluetooth_disabled_rounded
+                    : _isBusy(service.status)
+                    ? Icons.close_rounded
                     : Icons.bluetooth_searching_rounded,
                 size: 18,
               ),
@@ -321,8 +321,11 @@ class _MuseSessionCard extends StatelessWidget {
 
   static String _primaryActionText(MuseLiveService service) {
     return switch (service.status) {
-      MuseConnectionStatus.scanning => 'Scanning for Muse 2...',
-      MuseConnectionStatus.connecting => 'Setting up Muse sensors...',
+      MuseConnectionStatus.scanning => 'Cancel scan',
+      MuseConnectionStatus.connecting =>
+        service.source == MuseDataSource.bridge
+            ? 'Cancel bridge connection'
+            : 'Cancel connection',
       MuseConnectionStatus.live => 'Disconnect Muse 2',
       MuseConnectionStatus.offline => 'Retry direct connection',
       MuseConnectionStatus.mock => 'Scan for Muse 2',
@@ -485,22 +488,34 @@ class _MuseSensorGrid extends StatelessWidget {
       _MuseSensorData(
         icon: Icons.graphic_eq_rounded,
         label: 'EEG',
-        value: strongestBand,
-        detail: snapshot.streams.eeg ? 'Live bands' : 'Bands ready',
+        value: snapshot.streams.eeg || snapshot.source == 'mock'
+            ? strongestBand
+            : '--',
+        detail: snapshot.streams.eeg
+            ? 'Live bands'
+            : snapshot.source == 'mock'
+            ? 'Mock preview'
+            : 'Waiting for EEG',
         color: const Color(0xff22c55e),
       ),
       _MuseSensorData(
         icon: Icons.monitor_heart_rounded,
         label: 'PPG',
         value: body.heartRate == null ? body.ppg : '${body.heartRate} bpm',
-        detail: snapshot.streams.ppg ? 'Live pulse' : 'Pulse ready',
+        detail: snapshot.streams.ppg
+            ? 'Live pulse'
+            : snapshot.source == 'mock'
+            ? 'Mock preview'
+            : 'Waiting for PPG',
         color: const Color(0xffff4d6d),
       ),
       _MuseSensorData(
         icon: Icons.air_rounded,
         label: 'Breath',
         value: body.breathRate == null ? '-- rpm' : '${body.breathRate} rpm',
-        detail: snapshot.streams.acc ? 'Motion-derived' : 'Pace ready',
+        detail: body.breathRate == null
+            ? 'Estimator unavailable'
+            : 'Motion-derived estimate',
         color: const Color(0xff22d3ee),
       ),
       _MuseSensorData(
