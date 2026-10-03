@@ -13,7 +13,7 @@ class AppLinks {
   /// Privacy policy. Required by both stores because CerebroSync creates
   /// accounts and stores EEG-derived session data.
   static const String privacyPolicy =
-      'https://doc-hosting.flycricket.io/skate-sensor-privacy-policy/d569a3ae-a671-4d03-b14d-87981b3a3735/privacy';
+      'https://doc-hosting.flycricket.io/cerebrosync-privacy-policy/19a3b7d5-08e3-4379-a895-2fd96bed59dc/privacy';
 
   /// Support page or contact form. Required by App Store Connect.
   static const String support = 'https://codingmind.com';
